@@ -2,321 +2,311 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/add_task_viewmodel.dart';
 
-class AddTaskPage extends StatelessWidget {
-  const AddTaskPage({super.key});
+class AddTaskPage extends StatefulWidget {
+  final int? projectId; // Optional project ID if coming from project details
+
+  const AddTaskPage({super.key, this.projectId});
+
+  @override
+  State<AddTaskPage> createState() => _AddTaskPageState();
+}
+
+class _AddTaskPageState extends State<AddTaskPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final vm = context.read<AddTaskViewModel>();
+      await vm.loadInitialData();
+      if (widget.projectId != null) {
+        vm.setSelectedProject(widget.projectId!);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = Provider.of<AddTaskViewModel>(context);
-
     return Scaffold(
       body: Stack(
         children: [
-          // Background blobs
-          Positioned(top: 80, left: -60, child: _buildBlob(Colors.green, 200)),
+          /// White background
+          Container(color: Colors.white),
+
+          /// 🔹 Blurry blobs in background
           Positioned(
-            top: 40,
+            top: -40,
+            left: -60,
+            child: _buildBlob(const Color(0xFF6C4DE6), 220), // purple
+          ),
+          Positioned(
+            top: 120,
             right: -80,
-            child: _buildBlob(Colors.yellow, 220),
+            child: _buildBlob(const Color(0xFF9C6FE4), 200), // light purple
           ),
           Positioned(
-            bottom: 300,
+            bottom: 120,
             left: -70,
-            child: _buildBlob(Colors.blue, 240),
+            child: _buildBlob(const Color(0xFF00C9A7), 220), // teal/green
           ),
           Positioned(
-            bottom: 150,
+            bottom: 60,
             right: -60,
-            child: _buildBlob(Colors.purple, 200),
+            child: _buildBlob(const Color(0xFFFFC857), 180), // yellow
           ),
 
+          /// 🔹 Page content
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Top bar
-                  Row(
-                    children: const [
-                      Icon(Icons.arrow_back_ios, size: 18, color: Colors.black),
-                      SizedBox(width: 8),
-                      Text(
-                        "Create New Task",
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
+            child: Column(
+              children: [
+                // AppBar
+                _buildAppBar(context),
 
-                  // Assign To
-                  _buildInputCard(
-                    child: Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Color(0xFFFED7E2),
-                          child: Icon(Icons.work, color: Colors.pink),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text(
-                                "Assign to",
-                                style: TextStyle(
-                                  color: Colors.black54,
-                                  fontSize: 12,
-                                ),
+                // Body with form
+                Expanded(
+                  child: Consumer<AddTaskViewModel>(
+                    builder: (context, vm, child) {
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            // Assign To
+                            _buildCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label("Assign To"),
+                                  const SizedBox(height: 8),
+                                  vm.users.isNotEmpty
+                                      ? DropdownButtonFormField<int>(
+                                          value: vm.selectedAssigneeId,
+                                          decoration: _dropdownDecoration(),
+                                          hint: const Text("Select User"),
+                                          items: vm.users.map((user) {
+                                            return DropdownMenuItem<int>(
+                                              value: user['id'] as int,
+                                              child: Text(
+                                                user['name'] ?? 'Unknown User',
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (value) =>
+                                              vm.setSelectedAssignee(value),
+                                        )
+                                      : const Text("Loading users..."),
+                                ],
                               ),
-                              Text(
-                                "Harshit Bajaj",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Project Name
+                            _buildCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label("Project Name"),
+                                  const SizedBox(height: 8),
+                                  vm.projects.isNotEmpty
+                                      ? DropdownButtonFormField<int>(
+                                          value: vm.selectedProjectId,
+                                          decoration: _dropdownDecoration(),
+                                          hint: const Text("Select Project"),
+                                          items: [
+                                            const DropdownMenuItem<int>(
+                                              value: null,
+                                              child: Text("No Project"),
+                                            ),
+                                            ...vm.projects.map((project) {
+                                              return DropdownMenuItem<int>(
+                                                value: project['id'] as int,
+                                                child: Text(
+                                                  project['name'] ??
+                                                      'Unnamed Project',
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ],
+                                          onChanged: (value) =>
+                                              vm.setSelectedProject(value),
+                                        )
+                                      : const Text("Loading projects..."),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.search, color: Colors.black54),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Project Name
-                  _buildInputCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          "Project Name",
-                          style: TextStyle(color: Colors.black54, fontSize: 12),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          "Book Cover Design",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Description
-                  _buildInputCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          "Description",
-                          style: TextStyle(color: Colors.black54, fontSize: 12),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          "Design a professional and creative book cover that aligns with the theme, genre, and target audience of the book. Ensure the design is visually appealing, unique, and ready for both print and digital formats.",
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.black87,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Start Date
-                  _buildInputCard(
-                    child: InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: viewModel.startDate ?? DateTime.now(),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2030),
-                        );
-                        if (picked != null) viewModel.setStartDate(picked);
-                      },
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_month,
-                            color: Colors.purple,
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            "Start Date",
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontSize: 12,
                             ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            viewModel.startDate != null
-                                ? "${viewModel.startDate!.day.toString().padLeft(2, '0')}-${viewModel.startDate!.month.toString().padLeft(2, '0')}-${viewModel.startDate!.year}"
-                                : "Select",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const Icon(
-                            Icons.arrow_drop_down,
-                            color: Colors.black54,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                            const SizedBox(height: 16),
 
-                  // End Date
-                  _buildInputCard(
-                    child: InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: viewModel.endDate ?? DateTime.now(),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2030),
-                        );
-                        if (picked != null) viewModel.setEndDate(picked);
-                      },
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_month,
-                            color: Colors.purple,
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            "End Date",
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontSize: 12,
+                            // Task Title
+                            _buildCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label("Task Title"),
+                                  const SizedBox(height: 8),
+                                  _inputField(
+                                    vm.titleController,
+                                    "Enter task title",
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            viewModel.endDate != null
-                                ? "${viewModel.endDate!.day.toString().padLeft(2, '0')}-${viewModel.endDate!.month.toString().padLeft(2, '0')}-${viewModel.endDate!.year}"
-                                : "Select",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
+                            const SizedBox(height: 16),
+
+                            // Description
+                            _buildCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label("Description"),
+                                  const SizedBox(height: 8),
+                                  _inputField(
+                                    vm.descriptionController,
+                                    "Enter description",
+                                    maxLines: 4,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const Icon(
-                            Icons.arrow_drop_down,
-                            color: Colors.black54,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                            const SizedBox(height: 16),
 
-                  // Allotted Time
-                  _buildInputCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          "Allotted Time",
-                          style: TextStyle(color: Colors.black54, fontSize: 12),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          "9 Hrs",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Logo Upload
-                  _buildInputCard(
-                    child: Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 20,
-                          backgroundImage: NetworkImage(
-                            "https://images.unsplash.com/photo-1522202176988-66273c2fd55f",
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            "Book Covers",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.teal,
+                            // Start Date
+                            _buildDateCard(
+                              label: "Start Date",
+                              date: DateTime.now().add(const Duration(days: 1)),
+                              onTap: () async {
+                                await showDatePicker(
+                                  context: context,
+                                  initialDate: DateTime.now().add(
+                                    const Duration(days: 1),
+                                  ),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2030),
+                                );
+                              },
                             ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.purple.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            "Change Logo",
-                            style: TextStyle(color: Colors.purple),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 30),
+                            const SizedBox(height: 16),
 
-                  // Gradient Create Task Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: GestureDetector(
-                      onTap: () => viewModel.submit(),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF6C4CE2), Color(0xFFA084E8)],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
+                            // End Date
+                            _buildDateCard(
+                              label: "End Date",
+                              date:
+                                  vm.deadline ??
+                                  DateTime.now().add(const Duration(days: 2)),
+                              onTap: () async {
+                                final date = await showDatePicker(
+                                  context: context,
+                                  initialDate:
+                                      vm.deadline ??
+                                      DateTime.now().add(
+                                        const Duration(days: 2),
+                                      ),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2030),
+                                );
+                                if (date != null) vm.setDeadline(date);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Allotted Time
+                            _buildCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label("Allotted Time"),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    value: null,
+                                    decoration: _dropdownDecoration(),
+                                    hint: const Text("Select Hours"),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: "1",
+                                        child: Text("1 Hr"),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: "2",
+                                        child: Text("2 Hrs"),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: "4",
+                                        child: Text("4 Hrs"),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: "8",
+                                        child: Text("8 Hrs"),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: "9",
+                                        child: Text("9 Hrs"),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: "16",
+                                        child: Text("16 Hrs"),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: "24",
+                                        child: Text("24 Hrs"),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      // TODO: Add allotted time to ViewModel
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Priority
+                            _buildCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label("Priority"),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    value: vm.selectedPriority,
+                                    decoration: _dropdownDecoration(),
+                                    hint: const Text("Select Priority"),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: "0",
+                                        child: Text("Low"),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: "1",
+                                        child: Text("Medium"),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: "2",
+                                        child: Text("High"),
+                                      ),
+                                    ],
+                                    onChanged: (value) =>
+                                        vm.setSelectedPriority(value ?? "0"),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+
+                            // Submit Button
+                            _gradientButton(
+                              text: "Create Task",
+                              isLoading: vm.isSubmitting,
+                              onTap: () async {
+                                final success = await vm.submit();
+                                if (success && context.mounted) {
+                                  Navigator.pop(context);
+                                }
+                              },
+                            ),
+                          ],
                         ),
-                        alignment: Alignment.center,
-                        child: const Text(
-                          "Create Task",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -324,18 +314,67 @@ class AddTaskPage extends StatelessWidget {
     );
   }
 
-  Widget _buildInputCard({required Widget child}) {
+  /// 🔹 Helper widget for soft blur circles
+  Widget _buildBlob(Color color, double size) {
     return Container(
-      width: double.infinity,
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.25),
+            blurRadius: 120,
+            spreadRadius: 60,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🔹 Custom AppBar
+  Widget _buildAppBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
+            onPressed: () => Navigator.pop(context),
+          ),
+          const Expanded(
+            child: Text(
+              "Create New Task",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          const SizedBox(width: 48), // to balance back button space
+        ],
+      ),
+    );
+  }
+
+  /// 🔹 Reusable widgets
+  Widget _buildCard({required Widget child}) {
+    return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: const LinearGradient(
+          colors: [Colors.white, Color(0xFFFDFBFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black12.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.purple.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -343,20 +382,123 @@ class AddTaskPage extends StatelessWidget {
     );
   }
 
-  Widget _buildBlob(Color color, double size) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        // color: color.withOpacity(0.25),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 120,
-            spreadRadius: 60,
+  Widget _buildDateCard({
+    required String label,
+    required DateTime? date,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: _buildCard(
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today, color: Colors.purple),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                date != null ? "${date.day}-${date.month}-${date.year}" : label,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _inputField(
+    TextEditingController controller,
+    String hint, {
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.grey.shade100,
+        hintText: hint,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _gradientButton({
+    required String text,
+    required bool isLoading,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: InkWell(
+        onTap: isLoading ? null : onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF6C4DE6), Color(0xFF9C6FE4)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.purple.withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
+          child: isLoading
+              ? const SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _label(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Colors.grey,
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  InputDecoration _dropdownDecoration() {
+    return InputDecoration(
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
       ),
     );
   }

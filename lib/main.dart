@@ -49,7 +49,13 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginPage(),
         '/user_dashboard': (context) => const UserDashboardPage(),
         '/admin_dashboard': (context) => const AdminDashboardPage(),
-        '/add_task': (context) => const AddTaskPage(),
+        '/add_task': (context) {
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>?;
+          final projectId = args?['projectId'] as int?;
+          return AddTaskPage(projectId: projectId);
+        },
         '/project_details': (context) {
           final args =
               ModalRoute.of(context)!.settings.arguments

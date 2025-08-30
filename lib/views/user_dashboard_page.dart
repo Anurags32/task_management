@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:task_management/theme.dart' show AppTheme;
-import 'package:task_management/viewmodels/user_dashboard_viewmodel.dart';
+import '../viewmodels/user_dashboard_viewmodel.dart';
 
 class UserDashboardPage extends StatefulWidget {
   const UserDashboardPage({super.key});
@@ -14,243 +13,101 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
   @override
   void initState() {
     super.initState();
-    // Trigger initial load
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<UserDashboardViewModel>().refresh();
+      context.read<UserDashboardViewModel>().loadUserData();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final vm = context.watch<UserDashboardViewModel>();
-
     return Scaffold(
       body: Stack(
         children: [
           // Background blobs
-          Positioned(
-            top: 80,
-            left: -60,
-            child: _buildBlob(AppTheme.blobGreen, 200),
-          ),
+          Positioned(top: 80, left: -60, child: _buildBlob(Colors.green, 200)),
           Positioned(
             top: 40,
             right: -80,
-            child: _buildBlob(AppTheme.blobYellow, 220),
+            child: _buildBlob(Colors.yellow, 220),
           ),
           Positioned(
             bottom: 300,
             left: -70,
-            child: _buildBlob(AppTheme.blobBlue, 240),
+            child: _buildBlob(Colors.blue, 240),
           ),
           Positioned(
             bottom: 150,
             right: -60,
-            child: _buildBlob(AppTheme.blobPurple, 200),
+            child: _buildBlob(Colors.purple, 200),
           ),
 
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Top Profile Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _ProfileHeader(vm: vm),
-                      _NotificationIcon(vm: vm),
-                    ],
-                  ),
+            child: Consumer<UserDashboardViewModel>(
+              builder: (context, vm, child) {
+                if (vm.isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                  const SizedBox(height: 24),
-
-                  // Error Message
-                  if (vm.errorMessage != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.error_outline, color: Colors.red.shade700),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              vm.errorMessage!,
-                              style: TextStyle(color: Colors.red.shade700),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.close, color: Colors.red.shade700),
-                            onPressed: vm.clearError,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Projects Section
-                  Row(
-                    children: [
-                      const Text(
-                        'My Projects',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                if (vm.errorMessage != null) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red.shade400,
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${vm.projects.length}',
+                        const SizedBox(height: 16),
+                        Text(
+                          vm.errorMessage!,
                           style: TextStyle(
-                            color: Colors.blue.shade700,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.red.shade600,
                           ),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
-                      const Spacer(),
-                      if (vm.isRefreshing)
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => vm.refresh(),
+                          child: const Text('Retry'),
                         ),
-                      IconButton(
-                        icon: const Icon(Icons.refresh),
-                        onPressed: vm.refresh,
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Projects List
-                  if (vm.projects.isNotEmpty)
-                    SizedBox(
-                      height: 120,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: vm.projects.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 16),
-                        itemBuilder: (context, index) {
-                          final project = vm.projects[index];
-                          return _buildProjectCard(context, vm, project);
-                        },
-                      ),
-                    )
-                  else
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.folder_open,
-                            size: 48,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            "No projects assigned",
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
+                  );
+                }
 
-                  const SizedBox(height: 24),
-
-                  // Tasks Section
-                  Row(
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'My Tasks',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.purple.shade50,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${vm.tasks.length}',
-                          style: const TextStyle(
-                            color: Colors.purple,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Task List
-                  Expanded(
-                    child: vm.isRefreshing
-                        ? const Center(child: CircularProgressIndicator())
-                        : vm.tasks.isNotEmpty
-                        ? ListView.separated(
-                            itemCount: vm.tasks.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final task = vm.tasks[index];
-                              return _buildTaskCard(context, vm, task);
-                            },
-                          )
-                        : Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(32),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.grey.shade200),
+                      // Header
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 25,
+                            backgroundColor: Colors.purple.shade100,
+                            child: Icon(
+                              Icons.person,
+                              color: Colors.purple.shade700,
+                              size: 30,
                             ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  Icons.task_alt,
-                                  size: 48,
-                                  color: Colors.grey.shade400,
+                                const Text(
+                                  "Welcome Back!",
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                const SizedBox(height: 16),
                                 Text(
-                                  "No tasks assigned",
+                                  "You have ${vm.tasks.length} assigned tasks",
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.grey.shade600,
@@ -259,9 +116,167 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
                               ],
                             ),
                           ),
+                          IconButton(
+                            onPressed: () => vm.refresh(),
+                            icon: const Icon(Icons.refresh),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              elevation: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+
+                      // Projects Summary Section
+                      if (vm.projects.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            const Text(
+                              "My Project Tasks",
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                "${vm.projects.length}",
+                                style: TextStyle(
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Projects List
+                        SizedBox(
+                          height: 120,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: vm.projects.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 16),
+                            itemBuilder: (context, index) {
+                              final project = vm.projects[index];
+                              final projectTasks = vm.tasks.where((task) {
+                                final projectId = task['project_id'];
+                                int? actualProjectId;
+                                if (projectId is List && projectId.isNotEmpty) {
+                                  actualProjectId = projectId[0] as int?;
+                                } else if (projectId is int) {
+                                  actualProjectId = projectId;
+                                }
+                                return actualProjectId == project['id'];
+                              }).toList();
+
+                              return _buildProjectSummaryCard(
+                                project,
+                                projectTasks,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // Tasks Section
+                      Row(
+                        children: [
+                          const Text(
+                            "My Assigned Tasks",
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              "${vm.tasks.length}",
+                              style: TextStyle(
+                                color: Colors.purple.shade700,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Tasks List
+                      if (vm.tasks.isNotEmpty)
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: vm.tasks.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 16),
+                          itemBuilder: (context, index) {
+                            final task = vm.tasks[index];
+                            return _buildTaskCard(context, vm, task);
+                          },
+                        )
+                      else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.task_alt,
+                                size: 48,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                "No tasks assigned",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                "You don't have any tasks assigned yet",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade500,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],
@@ -269,18 +284,24 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
     );
   }
 
-  Widget _buildProjectCard(
+  Widget _buildTaskCard(
     BuildContext context,
     UserDashboardViewModel vm,
-    Map<String, dynamic> project,
+    Map<String, dynamic> task,
   ) {
-    final projectId = project['id'] as int?;
-    final projectTasks = projectId != null
-        ? vm.getTasksForProject(projectId)
-        : [];
+    // Check if task is completed by looking at stage_id primarily
+    bool isCompleted = false;
+
+    // For now, we'll show completion based on what we can determine
+    // The actual stage-based completion will be handled by the ViewModel
+    if (task['state'] == '3') {
+      isCompleted = true;
+    }
+    // Note: We'll enhance this when we have better stage information
+
+    final projectName = _getProjectName(vm, task);
 
     return Container(
-      width: 200,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -298,149 +319,107 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.blue.shade100,
-                child: Icon(
-                  Icons.folder,
-                  color: Colors.blue.shade700,
-                  size: 20,
-                ),
+              Icon(
+                _getTaskIcon(task),
+                color: _getTaskStatusColor(task['state']),
+                size: 24,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  project['name'] ?? 'Unnamed Project',
-                  style: const TextStyle(
+                  task['name'] ?? 'Unnamed Task',
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                    color: isCompleted ? Colors.grey.shade600 : Colors.black,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (!isCompleted)
+                ElevatedButton(
+                  onPressed: () => _showCompleteTaskDialog(context, vm, task),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                  ),
+                  child: const Text('Complete'),
+                ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            project['description'] ?? 'No description',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 12),
+
+          if (task['description'] != null &&
+              task['description'].toString().isNotEmpty) ...[
+            Text(
+              _stripHtmlTags(task['description']),
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 14,
+                height: 1.4,
+                decoration: isCompleted ? TextDecoration.lineThrough : null,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
           Row(
             children: [
-              Icon(Icons.task_alt, size: 16, color: Colors.grey.shade600),
+              if (projectName != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.folder, size: 14, color: Colors.blue.shade600),
+                      const SizedBox(width: 4),
+                      Text(
+                        projectName,
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Icon(
+                _getTaskPriorityIcon(task['priority']),
+                size: 16,
+                color: _getTaskPriorityColor(task['priority']),
+              ),
               const SizedBox(width: 4),
               Text(
-                "${projectTasks.length} tasks",
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _getProjectStatusColor(
-                    project['state'],
-                  ).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _getProjectStatusText(project['state']),
-                  style: TextStyle(
-                    color: _getProjectStatusColor(project['state']),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
+                _getTaskPriorityText(task['priority']),
+                style: TextStyle(
+                  color: _getTaskPriorityColor(task['priority']),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildTaskCard(
-    BuildContext context,
-    UserDashboardViewModel vm,
-    Map<String, dynamic> task,
-  ) {
-    final projectId = task['project_id']?[0];
-    final project = projectId != null ? vm.getProjectById(projectId) : null;
-    final stageName = task['stage_id']?[1] ?? 'Unknown Stage';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: _getTaskPriorityColor(
-              task['priority'],
-            ).withOpacity(0.2),
-            child: Icon(
-              Icons.task_alt,
-              color: _getTaskPriorityColor(task['priority']),
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task['name'] ?? 'Unnamed Task',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                if (project != null)
-                  Text(
-                    "Project: ${project['name']}",
-                    style: TextStyle(color: Colors.black54, fontSize: 12),
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  "Stage: $stageName",
-                  style: TextStyle(color: Colors.black54, fontSize: 12),
-                ),
-                if (task['date_deadline'] != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    "Deadline: ${_formatDate(task['date_deadline'])}",
-                    style: TextStyle(color: Colors.black54, fontSize: 12),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          const SizedBox(height: 8),
+          Row(
             children: [
-              const Text(
-                'Status',
-                style: TextStyle(fontSize: 12, color: Colors.black54),
-              ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: _getTaskStatusColor(task['state']).withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -448,12 +427,25 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
                 child: Text(
                   _getTaskStatusText(task['state']),
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
                     color: _getTaskStatusColor(task['state']),
                     fontSize: 10,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
+              const Spacer(),
+              if (task['date_deadline'] != null) ...[
+                Icon(Icons.schedule, size: 14, color: Colors.orange.shade600),
+                const SizedBox(width: 4),
+                Text(
+                  'Deadline: ${_formatDate(task['date_deadline'])}',
+                  style: TextStyle(
+                    color: Colors.orange.shade600,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ],
           ),
         ],
@@ -461,50 +453,74 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
     );
   }
 
-  Color _getProjectStatusColor(String? state) {
-    switch (state) {
-      case 'open':
-        return Colors.green;
-      case 'close':
-        return Colors.grey;
-      default:
-        return Colors.blue;
+  String? _getProjectName(
+    UserDashboardViewModel vm,
+    Map<String, dynamic> task,
+  ) {
+    final projectId = task['project_id'];
+
+    // Handle different project_id formats from Odoo
+    int? actualProjectId;
+    if (projectId is List && projectId.isNotEmpty) {
+      actualProjectId = projectId[0] as int?;
+    } else if (projectId is int) {
+      actualProjectId = projectId;
+    } else if (projectId == false || projectId == null) {
+      return null; // No project assigned
     }
+
+    if (actualProjectId != null) {
+      final project = vm.projects.firstWhere(
+        (p) => p['id'] == actualProjectId,
+        orElse: () => <String, dynamic>{},
+      );
+      return project['name'] as String?;
+    }
+    return null;
   }
 
-  String _getProjectStatusText(String? state) {
-    switch (state) {
-      case 'open':
-        return 'Active';
-      case 'close':
-        return 'Closed';
-      default:
-        return 'Unknown';
+  String _stripHtmlTags(dynamic text) {
+    if (text == null || text == false) {
+      return '';
     }
+
+    String cleanText = text.toString();
+    cleanText = cleanText.replaceAll(RegExp(r'<[^>]*>'), '');
+    cleanText = cleanText
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&nbsp;', ' ');
+
+    return cleanText.trim();
   }
 
-  Color _getTaskPriorityColor(String? priority) {
-    switch (priority) {
-      case '0': // Low
-        return Colors.green;
-      case '1': // High
-        return Colors.red;
-      case '2': // Medium
-        return Colors.orange;
+  IconData _getTaskIcon(Map<String, dynamic> task) {
+    switch (task['state']) {
+      case '1':
+        return Icons.radio_button_unchecked;
+      case '2':
+        return Icons.play_arrow;
+      case '3':
+        return Icons.check_circle;
+      case '4':
+        return Icons.cancel;
       default:
-        return Colors.blue;
+        return Icons.task_alt;
     }
   }
 
   Color _getTaskStatusColor(String? state) {
     switch (state) {
-      case '1': // Open
+      case '1':
         return Colors.blue;
-      case '2': // In Progress
+      case '2':
         return Colors.orange;
-      case '3': // Done
+      case '3':
         return Colors.green;
-      case '4': // Cancelled
+      case '4':
         return Colors.red;
       default:
         return Colors.grey;
@@ -518,7 +534,7 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
       case '2':
         return 'In Progress';
       case '3':
-        return 'Done';
+        return 'Completed';
       case '4':
         return 'Cancelled';
       default:
@@ -526,16 +542,148 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
     }
   }
 
-  String _formatDate(dynamic date) {
-    if (date is String) {
-      try {
-        final dateTime = DateTime.parse(date);
-        return "${dateTime.day.toString().padLeft(2, '0')}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.year}";
-      } catch (e) {
-        return date;
-      }
+  IconData _getTaskPriorityIcon(String? priority) {
+    switch (priority) {
+      case '0':
+        return Icons.keyboard_arrow_down;
+      case '1':
+        return Icons.keyboard_arrow_up;
+      case '2':
+        return Icons.remove;
+      default:
+        return Icons.remove;
     }
-    return date.toString();
+  }
+
+  Color _getTaskPriorityColor(String? priority) {
+    switch (priority) {
+      case '0':
+        return Colors.green;
+      case '1':
+        return Colors.red;
+      case '2':
+        return Colors.orange;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  String _getTaskPriorityText(String? priority) {
+    switch (priority) {
+      case '0':
+        return 'Low';
+      case '1':
+        return 'High';
+      case '2':
+        return 'Medium';
+      default:
+        return 'Normal';
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'N/A';
+    try {
+      final dateTime = DateTime.parse(date.toString());
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    } catch (e) {
+      return date.toString();
+    }
+  }
+
+  void _showCompleteTaskDialog(
+    BuildContext context,
+    UserDashboardViewModel vm,
+    Map<String, dynamic> task,
+  ) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green.shade600),
+              const SizedBox(width: 8),
+              const Text('Complete Task'),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to mark "${task['name']}" as completed?',
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Complete'),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                final success = await vm.completeTask(task['id']);
+                if (context.mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Task marked as completed!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    // Show error message if task completion failed
+                    final errorMessage =
+                        vm.errorMessage ?? 'Failed to complete task';
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(errorMessage),
+                        backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 8),
+                        action: SnackBarAction(
+                          label: 'Retry',
+                          textColor: Colors.white,
+                          onPressed: () async {
+                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                            // Retry task completion
+                            final retrySuccess = await vm.completeTask(
+                              task['id'],
+                            );
+                            if (context.mounted) {
+                              if (retrySuccess) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Task marked as completed!'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              } else {
+                                // Show error again
+                                final retryError =
+                                    vm.errorMessage ??
+                                    'Failed to complete task';
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(retryError),
+                                    backgroundColor: Colors.red,
+                                    duration: const Duration(seconds: 5),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildBlob(Color color, double size) {
@@ -554,76 +702,47 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
       ),
     );
   }
-}
 
-class _ProfileHeader extends StatelessWidget {
-  final UserDashboardViewModel vm;
-
-  const _ProfileHeader({required this.vm});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 28,
-          backgroundColor: Colors.purple.shade100,
-          child: Icon(Icons.person, color: Colors.purple.shade700, size: 28),
-        ),
-        const SizedBox(width: 12),
-        _HelloName(vm: vm),
-      ],
-    );
-  }
-}
-
-class _HelloName extends StatelessWidget {
-  final UserDashboardViewModel vm;
-
-  const _HelloName({required this.vm});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Hello!',
-          style: TextStyle(fontSize: 14, color: Colors.black54),
-        ),
-        Text(
-          vm.currentUser?['name'] ?? 'User',
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-      ],
-    );
-  }
-}
-
-class _NotificationIcon extends StatelessWidget {
-  final UserDashboardViewModel vm;
-
-  const _NotificationIcon({required this.vm});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const Icon(Icons.notifications, size: 28),
-        if (vm.errorMessage != null)
-          Positioned(
-            right: 0,
-            top: 2,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-            ),
+  Widget _buildProjectSummaryCard(
+    Map<String, dynamic> project,
+    List<Map<String, dynamic>> projectTasks,
+  ) {
+    return Container(
+      width: 180,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
-      ],
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.folder, size: 36, color: Colors.blue.shade600),
+          const SizedBox(height: 8),
+          Text(
+            project['name'] ?? 'Unnamed Project',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${projectTasks.length} tasks',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
+      ),
     );
   }
 }

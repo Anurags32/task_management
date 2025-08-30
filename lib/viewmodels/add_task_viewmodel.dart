@@ -1,86 +1,123 @@
 import 'package:flutter/material.dart';
-import 'package:task_management/services/task_service.dart';
+import '../services/task_service.dart';
+import '../services/odoo_client.dart'; // Added import for OdooClient
 
 class AddTaskViewModel extends ChangeNotifier {
   final TextEditingController titleController = TextEditingController();
   final TextEditingController descriptionController = TextEditingController();
-  DateTime? _dueDate;
-  DateTime? _startDate;
-  DateTime? _endDate;
+
   bool _isSubmitting = false;
   String? _errorMessage;
+  List<Map<String, dynamic>> _projects = [];
   List<Map<String, dynamic>> _users = [];
   List<Map<String, dynamic>> _stages = [];
-  List<int> _selectedUserIds = [];
-  int? _selectedStageId;
+  int? _selectedProjectId;
+  int? _selectedAssigneeId;
+  String _selectedPriority = '0';
+  DateTime? _deadline;
+  Map<String, dynamic>? _currentUser;
 
-  DateTime? get dueDate => _dueDate;
-  DateTime? get startDate => _startDate;
-  DateTime? get endDate => _endDate;
   bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
-  List<Map<String, dynamic>> get users => _users;
-  List<Map<String, dynamic>> get stages => _stages;
-  List<int> get selectedUserIds => _selectedUserIds;
-  int? get selectedStageId => _selectedStageId;
+  List<Map<String, dynamic>> get projects => List.unmodifiable(_projects);
+  List<Map<String, dynamic>> get users => List.unmodifiable(_users);
+  List<Map<String, dynamic>> get stages => List.unmodifiable(_stages);
+  int? get selectedProjectId => _selectedProjectId;
+  int? get selectedAssigneeId => _selectedAssigneeId;
+  String get selectedPriority => _selectedPriority;
+  DateTime? get deadline => _deadline;
+  Map<String, dynamic>? get currentUser => _currentUser;
 
-  AddTaskViewModel() {
-    _loadInitialData();
-  }
-
-  Future<void> _loadInitialData() async {
+  /// Load initial data (projects, users, stages)
+  Future<void> loadInitialData() async {
     try {
-      final usersResult = await TaskService().getUsers();
-      if (usersResult['success'] == true) {
-        _users = List<Map<String, dynamic>>.from(usersResult['data'] ?? []);
-      }
-
-      final stagesResult = await TaskService().getTaskStages();
-      if (stagesResult['success'] == true) {
-        _stages = List<Map<String, dynamic>>.from(stagesResult['data'] ?? []);
-        // Set default stage if available
-        if (_stages.isNotEmpty) {
-          _selectedStageId = _stages.first['id'];
+      // Load current user info
+      final sessionResult = await OdooClient.instance.sessionInfo();
+      if (sessionResult['success'] == true) {
+        final userData = sessionResult['data'] as Map<String, dynamic>?;
+        if (userData != null) {
+          _currentUser = userData;
         }
       }
+
+      // Load projects
+      final projectsResult = await TaskService().getAllProjects();
+      if (projectsResult['success'] == true) {
+        final projectsData = projectsResult['data'] as List<dynamic>?;
+        if (projectsData != null) {
+          _projects = List<Map<String, dynamic>>.from(projectsData);
+        }
+      }
+
+      // Load users
+      final usersResult = await TaskService().getUsers();
+      if (usersResult['success'] == true) {
+        final usersData = usersResult['data'] as List<dynamic>?;
+        if (usersData != null) {
+          _users = List<Map<String, dynamic>>.from(usersData);
+        }
+      }
+
+      // Load stages
+      final stagesResult = await TaskService().getTaskStages();
+      if (stagesResult['success'] == true) {
+        final stagesData = stagesResult['data'] as List<dynamic>?;
+        if (stagesData != null) {
+          _stages = List<Map<String, dynamic>>.from(stagesData);
+        }
+      }
+
       notifyListeners();
     } catch (e) {
-      // Ignore errors for now
+      _errorMessage = 'Failed to load data: ${e.toString()}';
+      notifyListeners();
     }
   }
 
-  void setDueDate(DateTime? date) {
-    _dueDate = date;
+  /// Set selected project
+  void setSelectedProject(int? projectId) {
+    if (projectId != null) {
+      // Check if the project exists in the loaded projects
+      final projectExists = _projects.any(
+        (project) => project['id'] == projectId,
+      );
+      if (!projectExists) {
+        // If project doesn't exist, don't set it
+        _selectedProjectId = null;
+      } else {
+        _selectedProjectId = projectId;
+      }
+    } else {
+      _selectedProjectId = null;
+    }
     notifyListeners();
   }
 
-  void setStartDate(DateTime? date) {
-    _startDate = date;
+  /// Set selected assignee
+  void setSelectedAssignee(int? assigneeId) {
+    _selectedAssigneeId = assigneeId;
     notifyListeners();
   }
 
-  void setEndDate(DateTime? date) {
-    _endDate = date;
+  /// Set selected priority
+  void setSelectedPriority(String priority) {
+    _selectedPriority = priority;
     notifyListeners();
   }
 
-  void setSelectedUserIds(List<int> userIds) {
-    _selectedUserIds = userIds;
+  /// Set deadline
+  void setDeadline(DateTime? deadline) {
+    _deadline = deadline;
     notifyListeners();
   }
 
-  void setSelectedStageId(int? stageId) {
-    _selectedStageId = stageId;
+  /// Clear error message
+  void clearError() {
+    _errorMessage = null;
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    titleController.dispose();
-    descriptionController.dispose();
-    super.dispose();
-  }
-
+  /// Submit task creation
   Future<bool> submit() async {
     _errorMessage = null;
     final title = titleController.text.trim();
@@ -99,8 +136,10 @@ class AddTaskViewModel extends ChangeNotifier {
       final result = await TaskService().createTask(
         name: title,
         description: description.isEmpty ? 'No description' : description,
-        userIds: _selectedUserIds.isNotEmpty ? _selectedUserIds : null,
-        stageId: _selectedStageId,
+        projectId: _selectedProjectId,
+        userIds: _selectedAssigneeId != null ? [_selectedAssigneeId!] : null,
+        priority: _selectedPriority,
+        deadline: _deadline,
       );
 
       if (result['success'] == true) {
@@ -118,8 +157,10 @@ class AddTaskViewModel extends ChangeNotifier {
     }
   }
 
-  void clearError() {
-    _errorMessage = null;
-    notifyListeners();
+  @override
+  void dispose() {
+    titleController.dispose();
+    descriptionController.dispose();
+    super.dispose();
   }
 }

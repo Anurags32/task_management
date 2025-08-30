@@ -233,13 +233,11 @@ class _AdminDashboardContent extends StatelessWidget {
 
                       // Projects List
                       if (vm.projects.isNotEmpty)
-                        SizedBox(
-                          height: 140,
+                        Expanded(
                           child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
                             itemCount: vm.projects.length,
                             separatorBuilder: (_, __) =>
-                                const SizedBox(width: 16),
+                                const SizedBox(height: 16),
                             itemBuilder: (context, index) {
                               final project = vm.projects[index];
                               return _buildProjectCard(context, vm, project);
@@ -282,83 +280,6 @@ class _AdminDashboardContent extends StatelessWidget {
                             ],
                           ),
                         ),
-
-                      const SizedBox(height: 24),
-
-                      // Tasks Section
-                      Row(
-                        children: [
-                          const Text(
-                            "All Tasks",
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.purple.shade50,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              "${vm.tasks.length}",
-                              style: const TextStyle(
-                                color: Colors.purple,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Tasks List
-                      Expanded(
-                        child: vm.tasks.isNotEmpty
-                            ? ListView.separated(
-                                itemCount: vm.tasks.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 12),
-                                itemBuilder: (context, index) {
-                                  final task = vm.tasks[index];
-                                  return _buildTaskCard(context, vm, task);
-                                },
-                              )
-                            : Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(32),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: Colors.grey.shade200,
-                                  ),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      Icons.task_alt,
-                                      size: 48,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      "No tasks found",
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                      ),
                     ],
                   );
                 },
@@ -375,18 +296,13 @@ class _AdminDashboardContent extends StatelessWidget {
     AdminDashboardViewModel vm,
     Map<String, dynamic> project,
   ) {
-    final projectId = project['id'] as int?;
-    final projectTasks = projectId != null
-        ? vm.getTasksForProject(projectId)
-        : [];
-
     return GestureDetector(
       onTap: () {
         Navigator.pushNamed(context, '/project_details', arguments: project);
       },
       child: Container(
-        width: 220,
-        padding: const EdgeInsets.all(16),
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -404,24 +320,39 @@ class _AdminDashboardContent extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  radius: 20,
+                  radius: 24,
                   backgroundColor: Colors.blue.shade100,
                   child: Icon(
                     Icons.folder,
                     color: Colors.blue.shade700,
-                    size: 20,
+                    size: 24,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 Expanded(
-                  child: Text(
-                    project['name'] ?? 'Unnamed Project',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        project['name'] ?? 'Unnamed Project',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _getProjectDescription(project['description']),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 14,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
                 PopupMenuButton<String>(
@@ -464,39 +395,32 @@ class _AdminDashboardContent extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              _getProjectDescription(project['description']),
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
-                Icon(Icons.task_alt, size: 16, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
+                Icon(Icons.task_alt, size: 18, color: Colors.grey.shade600),
+                const SizedBox(width: 8),
                 Text(
-                  "${projectTasks.length} tasks",
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  "${project['task_count'] ?? 0} tasks",
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                 ),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
+                    horizontal: 12,
+                    vertical: 6,
                   ),
                   decoration: BoxDecoration(
                     color: _getProjectStatusColor(
                       project['state'],
                     ).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     _getProjectStatusText(project['state']),
                     style: TextStyle(
                       color: _getProjectStatusColor(project['state']),
-                      fontSize: 10,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -505,36 +429,36 @@ class _AdminDashboardContent extends StatelessWidget {
             ),
             if (_isValidDate(project['date_start']) ||
                 _isValidDate(project['date'])) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   if (_isValidDate(project['date_start'])) ...[
                     Icon(
                       Icons.play_arrow,
-                      size: 14,
+                      size: 16,
                       color: Colors.green.shade600,
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Text(
-                      _formatDate(project['date_start']),
+                      'Start: ${_formatDate(project['date_start'])}',
                       style: TextStyle(
                         color: Colors.green.shade600,
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
                   if (_isValidDate(project['date_start']) &&
                       _isValidDate(project['date']))
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 20),
                   if (_isValidDate(project['date'])) ...[
-                    Icon(Icons.stop, size: 14, color: Colors.red.shade600),
-                    const SizedBox(width: 4),
+                    Icon(Icons.stop, size: 16, color: Colors.red.shade600),
+                    const SizedBox(width: 6),
                     Text(
-                      _formatDate(project['date']),
+                      'End: ${_formatDate(project['date'])}',
                       style: TextStyle(
                         color: Colors.red.shade600,
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -544,144 +468,6 @@ class _AdminDashboardContent extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTaskCard(
-    BuildContext context,
-    AdminDashboardViewModel vm,
-    Map<String, dynamic> task,
-  ) {
-    final projectId = task['project_id']?[0];
-    final project = projectId != null ? vm.getProjectById(projectId) : null;
-    final userIds = task['user_ids'] as List<dynamic>?;
-    final assignedUsers =
-        userIds
-            ?.map((id) => vm.getUserById(id))
-            .whereType<Map<String, dynamic>>()
-            .toList() ??
-        [];
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: _getTaskPriorityColor(
-              task['priority'],
-            ).withOpacity(0.2),
-            child: Icon(
-              _getTaskIcon(task),
-              color: _getTaskPriorityColor(task['priority']),
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        task['name'] ?? 'Unnamed Task',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (task['priority'] == '1') // High priority
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          "High",
-                          style: TextStyle(color: Colors.white, fontSize: 10),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                if (project != null)
-                  Text(
-                    "Project: ${project['name']}",
-                    style: TextStyle(color: Colors.black54, fontSize: 12),
-                  ),
-                const SizedBox(height: 4),
-                if (assignedUsers.isNotEmpty)
-                  Text.rich(
-                    TextSpan(
-                      text: "Assigned to ",
-                      style: const TextStyle(
-                        color: Colors.black54,
-                        fontSize: 12,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: assignedUsers.map((u) => u['name']).join(', '),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (task['date_deadline'] != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    "Deadline: ${_formatDate(task['date_deadline'])}",
-                    style: TextStyle(color: Colors.black54, fontSize: 12),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text(
-                "Status",
-                style: TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _getTaskStatusColor(task['state']).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _getTaskStatusText(task['state']),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _getTaskStatusColor(task['state']),
-                    fontSize: 10,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -696,64 +482,36 @@ class _AdminDashboardContent extends StatelessWidget {
     return 'Active';
   }
 
-  Color _getTaskPriorityColor(String? priority) {
-    switch (priority) {
-      case '0': // Low
-        return Colors.green;
-      case '1': // High
-        return Colors.red;
-      case '2': // Medium
-        return Colors.orange;
-      default:
-        return Colors.blue;
+  String _stripHtmlTags(dynamic text) {
+    if (text == null || text == false) {
+      return '';
     }
-  }
 
-  IconData _getTaskIcon(Map<String, dynamic> task) {
-    if (task['project_id'] != null) {
-      return Icons.task_alt;
-    }
-    return Icons.assignment;
-  }
+    String cleanText = text.toString();
 
-  Color _getTaskStatusColor(String? state) {
-    switch (state) {
-      case '1': // Open
-        return Colors.blue;
-      case '2': // In Progress
-        return Colors.orange;
-      case '3': // Done
-        return Colors.green;
-      case '4': // Cancelled
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
+    // Strip HTML tags
+    cleanText = cleanText.replaceAll(RegExp(r'<[^>]*>'), '');
 
-  String _getTaskStatusText(String? state) {
-    switch (state) {
-      case '1':
-        return 'Open';
-      case '2':
-        return 'In Progress';
-      case '3':
-        return 'Done';
-      case '4':
-        return 'Cancelled';
-      default:
-        return 'Unknown';
-    }
+    // Decode HTML entities
+    cleanText = cleanText
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&nbsp;', ' ');
+
+    // Trim whitespace
+    return cleanText.trim();
   }
 
   String _getProjectDescription(dynamic description) {
     if (description == null || description == false) {
       return 'No description';
     }
-    if (description is String) {
-      return description;
-    }
-    return description.toString();
+
+    String text = _stripHtmlTags(description);
+    return text.isEmpty ? 'No description' : text;
   }
 
   String _formatDate(dynamic date) {
@@ -814,129 +572,402 @@ class _AdminDashboardContent extends StatelessWidget {
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.folder_open, color: Colors.blue.shade600),
-                  const SizedBox(width: 8),
-                  const Text('Create New Project'),
-                ],
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
-              content: SingleChildScrollView(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 400),
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Project Name *',
-                        hintText: 'Enter project name',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.edit),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.folder_open,
+                            color: Colors.blue.shade600,
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Create New Project',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                'Add project details below',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Project Name
+                    Text(
+                      'Project Name *',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter project name',
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: Colors.blue.shade400,
+                            width: 2,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Description
+                    Text(
+                      'Description',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: descriptionController,
                       maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Description (Optional)',
-                        hintText: 'Enter project description',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.description),
+                      decoration: InputDecoration(
+                        hintText: 'Enter project description (optional)',
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: Colors.blue.shade400,
+                            width: 2,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
+
+                    // Date Selection Row
+                    Row(
+                      children: [
+                        // Start Date
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Start Date',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              InkWell(
+                                onTap: () async {
+                                  final date = await showDatePicker(
+                                    context: context,
+                                    initialDate: DateTime.now(),
+                                    firstDate: DateTime.now().subtract(
+                                      const Duration(days: 365),
+                                    ),
+                                    lastDate: DateTime.now().add(
+                                      const Duration(days: 365),
+                                    ),
+                                  );
+                                  if (date != null) {
+                                    setState(() {
+                                      startDate = date;
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_today,
+                                        color: Colors.blue.shade600,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        startDate != null
+                                            ? '${startDate!.day}/${startDate!.month}/${startDate!.year}'
+                                            : 'Select date',
+                                        style: TextStyle(
+                                          color: startDate != null
+                                              ? Colors.black87
+                                              : Colors.grey.shade500,
+                                          fontWeight: startDate != null
+                                              ? FontWeight.w500
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        // End Date
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'End Date',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              InkWell(
+                                onTap: () async {
+                                  final date = await showDatePicker(
+                                    context: context,
+                                    initialDate:
+                                        startDate ??
+                                        DateTime.now().add(
+                                          const Duration(days: 7),
+                                        ),
+                                    firstDate: startDate ?? DateTime.now(),
+                                    lastDate: DateTime.now().add(
+                                      const Duration(days: 365),
+                                    ),
+                                  );
+                                  if (date != null) {
+                                    setState(() {
+                                      endDate = date;
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_today,
+                                        color: Colors.blue.shade600,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        endDate != null
+                                            ? '${endDate!.day}/${endDate!.month}/${endDate!.year}'
+                                            : 'Select date',
+                                        style: TextStyle(
+                                          color: endDate != null
+                                              ? Colors.black87
+                                              : Colors.grey.shade500,
+                                          fontWeight: endDate != null
+                                              ? FontWeight.w500
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Action Buttons
                     Row(
                       children: [
                         Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: DateTime.now(),
-                                firstDate: DateTime.now(),
-                                lastDate: DateTime.now().add(
-                                  const Duration(days: 365),
-                                ),
-                              );
-                              if (date != null) {
-                                setState(() {
-                                  startDate = date;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade400),
-                                borderRadius: BorderRadius.circular(4),
+                          child: TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.grey.shade300),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.calendar_today,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    startDate != null
-                                        ? '${startDate!.day}/${startDate!.month}/${startDate!.year}'
-                                        : 'Start Date (Optional)',
-                                    style: TextStyle(
-                                      color: startDate != null
-                                          ? Colors.black
-                                          : Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
+                            ),
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: startDate ?? DateTime.now(),
-                                firstDate: startDate ?? DateTime.now(),
-                                lastDate: DateTime.now().add(
-                                  const Duration(days: 365),
-                                ),
-                              );
-                              if (date != null) {
-                                setState(() {
-                                  endDate = date;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade400),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.calendar_today,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    endDate != null
-                                        ? '${endDate!.day}/${endDate!.month}/${endDate!.year}'
-                                        : 'End Date (Optional)',
-                                    style: TextStyle(
-                                      color: endDate != null
-                                          ? Colors.black
-                                          : Colors.grey.shade600,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final name = nameController.text.trim();
+                              final description = descriptionController.text
+                                  .trim();
+
+                              if (name.isNotEmpty) {
+                                vm.createProject(
+                                  name: name,
+                                  description: description.isNotEmpty
+                                      ? description
+                                      : null,
+                                  dateStart: startDate,
+                                  date: endDate,
+                                );
+                                Navigator.of(context).pop();
+
+                                // Show success message
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Project "$name" created successfully!',
+                                        ),
+                                      ],
+                                    ),
+                                    backgroundColor: Colors.green,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                ],
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.error_outline,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Text(
+                                          'Project name cannot be empty.',
+                                        ),
+                                      ],
+                                    ),
+                                    backgroundColor: Colors.red,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
+                              elevation: 2,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add, size: 20),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Create Project',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -945,54 +976,6 @@ class _AdminDashboardContent extends StatelessWidget {
                   ],
                 ),
               ),
-              actions: <Widget>[
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade600,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Create Project'),
-                  onPressed: () {
-                    final name = nameController.text.trim();
-                    final description = descriptionController.text.trim();
-
-                    if (name.isNotEmpty) {
-                      vm.createProject(
-                        name: name,
-                        description: description.isNotEmpty
-                            ? description
-                            : null,
-                        startDate: startDate,
-                        endDate: endDate,
-                      );
-                      Navigator.of(context).pop();
-
-                      // Show success message
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Project "$name" created successfully!',
-                          ),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Project name cannot be empty.'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ],
             );
           },
         );
@@ -1181,8 +1164,8 @@ class _AdminDashboardContent extends StatelessWidget {
                         description: description.isNotEmpty
                             ? description
                             : null,
-                        startDate: startDate,
-                        endDate: endDate,
+                        dateStart: startDate,
+                        date: endDate,
                       );
                       Navigator.of(context).pop();
 

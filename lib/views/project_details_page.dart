@@ -16,7 +16,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminDashboardViewModel>().refresh();
+      if (mounted) {
+        context.read<AdminDashboardViewModel>().refresh();
+      }
     });
   }
 
@@ -24,7 +26,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.project['name'] ?? 'Project Details'),
+        title: Text(
+          _stripHtmlTags(widget.project['name'] ?? 'Project Details'),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
@@ -35,122 +39,179 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              context.read<AdminDashboardViewModel>().refresh();
+              if (mounted) {
+                try {
+                  context.read<AdminDashboardViewModel>().refresh();
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to refresh: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              }
             },
           ),
         ],
       ),
       body: Consumer<AdminDashboardViewModel>(
         builder: (context, vm, child) {
-          final projectId = widget.project['id'] as int?;
-          final tasks = projectId != null
-              ? vm.getTasksForProject(projectId)
-              : [];
+          try {
+            final projectId = widget.project['id'] as int?;
+            final tasks = projectId != null
+                ? vm.getTasksForProject(projectId)
+                : [];
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Project Header Card
-                _buildProjectHeaderCard(),
-                const SizedBox(height: 24),
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Project Header Card
+                  _buildProjectHeaderCard(),
+                  const SizedBox(height: 24),
 
-                // Tasks Section
-                Row(
-                  children: [
-                    const Text(
-                      "Tasks",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.shade50,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        "${tasks.length}",
+                  // Tasks Section
+                  Row(
+                    children: [
+                      const Text(
+                        "Tasks",
                         style: TextStyle(
-                          color: Colors.purple.shade700,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                    const Spacer(),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/add_task');
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          "${tasks.length}",
+                          style: TextStyle(
+                            color: Colors.purple.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/add_task',
+                            arguments: {'projectId': widget.project['id']},
+                          );
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Task'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Tasks List
+                  if (tasks.isNotEmpty)
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: tasks.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final task = tasks[index];
+                        return RepaintBoundary(
+                          child: _buildTaskCard(context, vm, task),
+                        );
                       },
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Task'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purple,
-                        foregroundColor: Colors.white,
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.task_alt,
+                            size: 48,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "No tasks found",
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Create your first task for this project",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Tasks List
-                if (tasks.isNotEmpty)
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: tasks.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final task = tasks[index];
-                      return _buildTaskCard(context, vm, task);
-                    },
-                  )
-                else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.task_alt,
-                          size: 48,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          "No tasks found",
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Create your first task for this project",
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade500,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                ],
+              ),
+            );
+          } catch (e) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red.shade400,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading project details',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red.shade700,
                     ),
                   ),
-              ],
-            ),
-          );
+                  const SizedBox(height: 8),
+                  Text(
+                    'Please try refreshing the page',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (mounted) {
+                        context.read<AdminDashboardViewModel>().refresh();
+                      }
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
         },
       ),
     );
@@ -189,7 +250,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.project['name'] ?? 'Unnamed Project',
+                      _stripHtmlTags(
+                        widget.project['name'] ?? 'Unnamed Project',
+                      ),
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -329,7 +392,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      task['name'] ?? 'Unnamed Task',
+                      _stripHtmlTags(task['name'] ?? 'Unnamed Task'),
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -367,7 +430,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
               task['description'].toString().isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
-              task['description'],
+              _stripHtmlTags(task['description']),
               style: TextStyle(
                 color: Colors.grey.shade600,
                 fontSize: 14,
@@ -384,7 +447,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                 children: [
                   TextSpan(
                     text: assignedUsers
-                        .map((user) => user['name'] ?? 'Unknown')
+                        .map(
+                          (user) => _stripHtmlTags(user['name'] ?? 'Unknown'),
+                        )
                         .join(', '),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
@@ -415,6 +480,25 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         ],
       ),
     );
+  }
+
+  // Clean HTML tags and special characters from text
+  String _stripHtmlTags(dynamic text) {
+    if (text == null || text == false) {
+      return '';
+    }
+
+    String cleanText = text.toString();
+    cleanText = cleanText.replaceAll(RegExp(r'<[^>]*>'), '');
+    cleanText = cleanText
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&nbsp;', ' ');
+
+    return cleanText.trim();
   }
 
   Color _getProjectStatusColor(String? state) {
@@ -509,11 +593,18 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   }
 
   bool _isValidDescription(dynamic description) {
-    return description != null && description.toString().isNotEmpty;
+    if (description == null || description == false) {
+      return false;
+    }
+    final cleanDesc = _stripHtmlTags(description);
+    return cleanDesc.isNotEmpty;
   }
 
   String _getProjectDescription(dynamic description) {
-    return description ?? 'No description available';
+    if (description == null || description == false) {
+      return 'No description available';
+    }
+    return _stripHtmlTags(description);
   }
 
   bool _isValidDate(dynamic date) {

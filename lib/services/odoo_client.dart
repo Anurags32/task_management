@@ -316,6 +316,59 @@ class OdooClient {
     }
   }
 
+  /// Check if a model exists and is accessible
+  Future<bool> modelExists(String modelName) async {
+    try {
+      print('OdooClient: Checking if model $modelName exists...');
+
+      final payload = {
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'model': 'ir.model',
+          'method': 'search_count',
+          'args': [
+            [
+              ['model', '=', modelName],
+            ],
+          ],
+          'kwargs': {},
+        },
+      };
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.callKwEndpoint),
+            headers: _baseHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      _storeCookies(res);
+
+      if (res.statusCode != 200) {
+        print('OdooClient: HTTP error checking model: ${res.statusCode}');
+        return false;
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      print('OdooClient: Model check response: $data');
+
+      if (data['error'] != null) {
+        print('OdooClient: Error checking model: ${data['error']}');
+        return false;
+      }
+
+      final count = data['result'] as int?;
+      final exists = count != null && count > 0;
+      print('OdooClient: Model $modelName exists: $exists (count: $count)');
+      return exists;
+    } catch (e) {
+      print('OdooClient: Exception checking model: $e');
+      return false;
+    }
+  }
+
   /// Update record
   Future<Map<String, dynamic>> update({
     required String model,
@@ -323,6 +376,8 @@ class OdooClient {
     required Map<String, dynamic> values,
   }) async {
     try {
+      print('OdooClient: Updating $model with ID $recordId, values: $values');
+
       final payload = {
         'jsonrpc': '2.0',
         'method': 'call',
@@ -347,6 +402,9 @@ class OdooClient {
 
       _storeCookies(res);
 
+      print('OdooClient: HTTP response status: ${res.statusCode}');
+      print('OdooClient: Response body: ${res.body}');
+
       if (res.statusCode != 200) {
         return {'success': false, 'error': 'HTTP Error: ${res.statusCode}'};
       }
@@ -355,17 +413,18 @@ class OdooClient {
 
       if (data['error'] != null) {
         final error = data['error'] as Map<String, dynamic>;
-        return {
-          'success': false,
-          'error':
-              error['data']?['message'] ??
-              error['message'] ??
-              'Failed to update record',
-        };
+        final errorMessage =
+            error['data']?['message'] ??
+            error['message'] ??
+            'Failed to update record';
+        print('OdooClient: Server error: $errorMessage');
+        return {'success': false, 'error': errorMessage};
       }
 
+      print('OdooClient: Update successful');
       return {'success': true, 'message': 'Record updated successfully'};
     } catch (e) {
+      print('OdooClient: Exception during update: $e');
       return {'success': false, 'error': 'Network error: ${e.toString()}'};
     }
   }

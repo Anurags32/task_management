@@ -122,17 +122,15 @@ class AdminDashboardViewModel extends ChangeNotifier {
   Future<bool> createProject({
     required String name,
     String? description,
-    int? userId,
-    DateTime? startDate,
-    DateTime? endDate,
+    DateTime? dateStart,
+    DateTime? date,
   }) async {
     try {
       final result = await TaskService().createProject(
         name: name,
         description: description,
-        userId: userId,
-        startDate: startDate,
-        endDate: endDate,
+        dateStart: dateStart,
+        date: date,
       );
 
       if (result['success'] == true) {
@@ -155,18 +153,16 @@ class AdminDashboardViewModel extends ChangeNotifier {
     required int projectId,
     String? name,
     String? description,
-    int? userId,
-    DateTime? startDate,
-    DateTime? endDate,
+    DateTime? dateStart,
+    DateTime? date,
   }) async {
     try {
       final result = await TaskService().updateProject(
         projectId: projectId,
         name: name,
         description: description,
-        userId: userId,
-        startDate: startDate,
-        endDate: endDate,
+        dateStart: dateStart,
+        date: date,
       );
 
       if (result['success'] == true) {
