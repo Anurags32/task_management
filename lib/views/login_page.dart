@@ -15,27 +15,43 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleLogin(BuildContext context) async {
     final vm = context.read<LoginViewModel>();
-    final email = vm.emailController.text.trim();
 
-    // सिर्फ़ admin check
-    if (email.toLowerCase() != "admin") {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Only admin login allowed.')),
-      );
-      return;
-    }
+    // Clear any previous errors
+    vm.clearError();
 
-    // अब login API call करो
-    final ok = await vm.login();
-    if (!ok) {
-      final msg = vm.errorMessage ?? 'Login failed.';
+    // Call Odoo login
+    final result = await vm.login();
+
+    if (!result['success']) {
+      final msg = result['error'] ?? 'Login failed.';
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
       return;
     }
 
     if (!context.mounted) return;
-    Navigator.pushReplacementNamed(context, '/admin_dashboard');
+
+    // Route based on user type
+    final userType = result['userType'];
+    String route;
+
+    switch (userType) {
+      case 'admin':
+        route = '/admin_dashboard';
+        break;
+      case 'task_creator':
+        route = '/admin_dashboard'; // Task creators can access admin features
+        break;
+      case 'normal_user':
+        route = '/user_dashboard';
+        break;
+      default:
+        route = '/user_dashboard';
+    }
+
+    Navigator.pushReplacementNamed(context, route);
   }
 
   @override

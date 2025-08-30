@@ -15,6 +15,7 @@ import 'views/login_page.dart';
 import 'views/user_dashboard_page.dart';
 import 'views/admin_dashboard_page.dart';
 import 'views/add_task_page.dart';
+import 'views/project_details_page.dart';
 
 void main() {
   runApp(
@@ -49,6 +50,12 @@ class MyApp extends StatelessWidget {
         '/user_dashboard': (context) => const UserDashboardPage(),
         '/admin_dashboard': (context) => const AdminDashboardPage(),
         '/add_task': (context) => const AddTaskPage(),
+        '/project_details': (context) {
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
+          return ProjectDetailsPage(project: args);
+        },
       },
     );
   }

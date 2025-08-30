@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:task_management/services/task_service.dart';
 
 class AddTaskViewModel extends ChangeNotifier {
   final TextEditingController titleController = TextEditingController();
@@ -8,12 +9,45 @@ class AddTaskViewModel extends ChangeNotifier {
   DateTime? _endDate;
   bool _isSubmitting = false;
   String? _errorMessage;
+  List<Map<String, dynamic>> _users = [];
+  List<Map<String, dynamic>> _stages = [];
+  List<int> _selectedUserIds = [];
+  int? _selectedStageId;
 
   DateTime? get dueDate => _dueDate;
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
   bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
+  List<Map<String, dynamic>> get users => _users;
+  List<Map<String, dynamic>> get stages => _stages;
+  List<int> get selectedUserIds => _selectedUserIds;
+  int? get selectedStageId => _selectedStageId;
+
+  AddTaskViewModel() {
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    try {
+      final usersResult = await TaskService().getUsers();
+      if (usersResult['success'] == true) {
+        _users = List<Map<String, dynamic>>.from(usersResult['data'] ?? []);
+      }
+
+      final stagesResult = await TaskService().getTaskStages();
+      if (stagesResult['success'] == true) {
+        _stages = List<Map<String, dynamic>>.from(stagesResult['data'] ?? []);
+        // Set default stage if available
+        if (_stages.isNotEmpty) {
+          _selectedStageId = _stages.first['id'];
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      // Ignore errors for now
+    }
+  }
 
   void setDueDate(DateTime? date) {
     _dueDate = date;
@@ -30,6 +64,16 @@ class AddTaskViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSelectedUserIds(List<int> userIds) {
+    _selectedUserIds = userIds;
+    notifyListeners();
+  }
+
+  void setSelectedStageId(int? stageId) {
+    _selectedStageId = stageId;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     titleController.dispose();
@@ -40,28 +84,42 @@ class AddTaskViewModel extends ChangeNotifier {
   Future<bool> submit() async {
     _errorMessage = null;
     final title = titleController.text.trim();
+    final description = descriptionController.text.trim();
 
     if (title.isEmpty) {
       _errorMessage = 'Title is required.';
       notifyListeners();
       return false;
     }
-    if (_startDate == null) {
-      _errorMessage = 'Please select a start date.';
-      notifyListeners();
-      return false;
-    }
-    if (_endDate == null) {
-      _errorMessage = 'Please select an end date.';
-      notifyListeners();
-      return false;
-    }
 
     _isSubmitting = true;
     notifyListeners();
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-    _isSubmitting = false;
+
+    try {
+      final result = await TaskService().createTask(
+        name: title,
+        description: description.isEmpty ? 'No description' : description,
+        userIds: _selectedUserIds.isNotEmpty ? _selectedUserIds : null,
+        stageId: _selectedStageId,
+      );
+
+      if (result['success'] == true) {
+        return true;
+      } else {
+        _errorMessage = result['error'] ?? 'Failed to create task.';
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to create task. Please try again.';
+      return false;
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  void clearError() {
+    _errorMessage = null;
     notifyListeners();
-    return true;
   }
 }

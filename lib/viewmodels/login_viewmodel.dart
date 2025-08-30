@@ -7,9 +7,11 @@ class LoginViewModel extends ChangeNotifier {
 
   bool _isLoading = false;
   String? _errorMessage;
+  Map<String, dynamic>? _currentUser;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  Map<String, dynamic>? get currentUser => _currentUser;
 
   @override
   void dispose() {
@@ -18,41 +20,75 @@ class LoginViewModel extends ChangeNotifier {
     super.dispose();
   }
 
-  Future<bool> login() async {
-    final email = emailController.text.trim();
+  Future<Map<String, dynamic>> login() async {
+    final usernameOrEmail = emailController.text.trim();
     final password = passwordController.text;
 
     _errorMessage = null;
-    if (email.isEmpty || !email.contains('@')) {
-      _errorMessage = 'Please enter a valid email.';
+    if (usernameOrEmail.isEmpty) {
+      _errorMessage = 'Please enter username or email.';
       notifyListeners();
-      return false;
+      return {'success': false, 'error': _errorMessage, 'userType': null};
     }
     if (password.isEmpty) {
       _errorMessage = 'Password is required.';
       notifyListeners();
-      return false;
+      return {'success': false, 'error': _errorMessage, 'userType': null};
     }
 
     _isLoading = true;
     notifyListeners();
 
     try {
-      final success = await OdooClient.instance.login(
-        login: email,
+      final result = await OdooClient.instance.login(
+        login: usernameOrEmail,
         password: password,
       );
-      if (!success) {
-        _errorMessage = 'Invalid credentials.';
-        return false;
+
+      if (result['success'] == true) {
+        _currentUser = result['user'];
+        _errorMessage = null;
+
+        // Determine user type
+        String userType;
+        if (OdooClient.instance.isAdmin) {
+          userType = 'admin';
+        } else if (usernameOrEmail.toLowerCase() == 'anurag@gmail.com') {
+          userType = 'task_creator';
+        } else {
+          userType = 'normal_user';
+        }
+
+        return {
+          'success': true,
+          'userType': userType,
+          'user': _currentUser,
+          'uid': result['uid'],
+        };
+      } else {
+        _errorMessage = result['error'] ?? 'Login failed.';
+        return {'success': false, 'error': _errorMessage, 'userType': null};
       }
-      return true;
     } catch (e) {
       _errorMessage = 'Login failed. Please try again.';
-      return false;
+      return {'success': false, 'error': _errorMessage, 'userType': null};
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Clear error message
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Logout current user
+  Future<void> logout() async {
+    await OdooClient.instance.logout();
+    _currentUser = null;
+    _errorMessage = null;
+    notifyListeners();
   }
 }

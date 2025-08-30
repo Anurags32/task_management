@@ -2,19 +2,19 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/odoo_config.dart';
 
-/// Minimal Odoo web session client using /web/session endpoints.
-/// - Handles login, current session check, and logout
-/// - Keeps session via cookies stored in [cookieJar]
+/// Odoo web session client with improved error handling and user management
 class OdooClient {
   OdooClient._();
   static final OdooClient instance = OdooClient._();
 
   final Map<String, String> _cookieJar = <String, String>{};
+  Map<String, dynamic>? _currentUser;
 
   Uri _uri(String path) => Uri.parse('${OdooConfig.baseUrl}$path');
 
   Map<String, String> get _baseHeaders => {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     if (_cookieJar.isNotEmpty)
       'Cookie': _cookieJar.entries.map((e) => '${e.key}=${e.value}').join('; '),
   };
@@ -22,7 +22,7 @@ class OdooClient {
   void _storeCookies(http.Response res) {
     final rawSetCookies = res.headers['set-cookie'];
     if (rawSetCookies == null) return;
-    // Can be multiple set-cookie separated by comma, split safely
+
     for (final cookiePart in rawSetCookies.split(',')) {
       final segments = cookiePart.split(';').first.trim().split('=');
       if (segments.length >= 2) {
@@ -35,105 +35,390 @@ class OdooClient {
     }
   }
 
-  Future<bool> login({required String login, required String password}) async {
-    final body = jsonEncode({
-      'jsonrpc': '2.0',
-      'method': 'call',
-      'params': {
-        'db': OdooConfig.database,
-        'login': login,
-        'password': password,
-      },
-    });
-
-    final res = await http.post(
-      _uri('/web/session/authenticate'),
-      headers: _baseHeaders,
-      body: body,
-    );
-    _storeCookies(res);
-
-    if (res.statusCode != 200) return false;
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final result = data['result'];
-    return result != null && result['uid'] != null;
-  }
-
-  Future<Map<String, dynamic>?> sessionInfo() async {
-    final body = jsonEncode({'jsonrpc': '2.0', 'method': 'call', 'params': {}});
-    final res = await http.post(
-      _uri('/web/session/get_session_info'),
-      headers: _baseHeaders,
-      body: body,
-    );
-    _storeCookies(res);
-    if (res.statusCode != 200) return null;
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    return (data['result'] as Map<String, dynamic>?);
-  }
-
-  Future<void> logout() async {
-    final body = jsonEncode({'jsonrpc': '2.0', 'method': 'call', 'params': {}});
-    final res = await http.post(
-      _uri('/web/session/destroy'),
-      headers: _baseHeaders,
-      body: body,
-    );
-    _storeCookies(res);
-  }
-
-  /// Example: read tasks from project.task using /web/dataset/call_kw
-  Future<List<dynamic>> searchRead({
-    required String model,
-    List<dynamic>? domain,
-    List<String>? fields,
-    int limit = 40,
+  /// Login with better error handling
+  Future<Map<String, dynamic>> login({
+    required String login,
+    required String password,
   }) async {
-    final payload = {
-      'jsonrpc': '2.0',
-      'method': 'call',
-      'params': {
-        'model': model,
-        'method': 'search_read',
-        'args': [domain ?? []],
-        'kwargs': {'fields': fields ?? [], 'limit': limit},
-      },
-    };
-    final res = await http.post(
-      _uri('/web/dataset/call_kw'),
-      headers: _baseHeaders,
-      body: jsonEncode(payload),
-    );
-    _storeCookies(res);
-    if (res.statusCode != 200) return [];
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    if (data['result'] == null) return [];
-    return List<dynamic>.from(data['result'] as List);
+    try {
+      final body = jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'db': OdooConfig.database,
+          'login': login,
+          'password': password,
+        },
+      });
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.authenticateEndpoint),
+            headers: _baseHeaders,
+            body: body,
+          )
+          .timeout(const Duration(seconds: 30));
+
+      _storeCookies(res);
+
+      if (res.statusCode != 200) {
+        return {
+          'success': false,
+          'error': 'HTTP Error: ${res.statusCode}',
+          'details': res.body,
+        };
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+
+      if (data['error'] != null) {
+        final error = data['error'] as Map<String, dynamic>;
+        return {
+          'success': false,
+          'error':
+              error['data']?['message'] ??
+              error['message'] ??
+              'Authentication failed',
+          'details': error,
+        };
+      }
+
+      final result = data['result'] as Map<String, dynamic>?;
+      if (result == null || result['uid'] == null) {
+        return {
+          'success': false,
+          'error': 'Invalid response from server',
+          'details': data,
+        };
+      }
+
+      // Store user info
+      _currentUser = {
+        'uid': result['uid'],
+        'user_context': result['user_context'],
+        'db': result['db'],
+        'login': login,
+      };
+
+      return {'success': true, 'user': _currentUser, 'uid': result['uid']};
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Network error: ${e.toString()}',
+        'details': e.toString(),
+      };
+    }
   }
 
-  /// Example: create project.task
-  Future<int?> create({
+  /// Get current user info
+  Map<String, dynamic>? get currentUser => _currentUser;
+
+  /// Check if user is admin
+  bool get isAdmin {
+    if (_currentUser == null) return false;
+    final login = _currentUser!['login']?.toString().toLowerCase();
+    return login == 'admin';
+  }
+
+  /// Get current session info
+  Future<Map<String, dynamic>> sessionInfo() async {
+    try {
+      final body = jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {},
+      });
+      final res = await http
+          .post(
+            _uri(OdooConfig.sessionInfoEndpoint),
+            headers: _baseHeaders,
+            body: body,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      _storeCookies(res);
+      if (res.statusCode != 200) {
+        return {'success': false, 'error': 'HTTP Error: ${res.statusCode}'};
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (data['error'] != null) {
+        return {'success': false, 'error': 'Session error'};
+      }
+
+      return {'success': true, 'data': data['result']};
+    } catch (e) {
+      return {'success': false, 'error': 'Session error: ${e.toString()}'};
+    }
+  }
+
+  /// Logout and clear session
+  Future<void> logout() async {
+    try {
+      final body = jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {},
+      });
+      await http
+          .post(
+            _uri(OdooConfig.logoutEndpoint),
+            headers: _baseHeaders,
+            body: body,
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      // Ignore logout errors
+    } finally {
+      _cookieJar.clear();
+      _currentUser = null;
+    }
+  }
+
+  /// Ensure we have a valid session
+  Future<bool> _ensureSession() async {
+    if (_currentUser != null) {
+      // Check if session is still valid
+      try {
+        final sessionResult = await sessionInfo();
+        return sessionResult['success'] == true;
+      } catch (e) {
+        // Session expired, need to re-authenticate
+        _currentUser = null;
+        _cookieJar.clear();
+      }
+    }
+    return false;
+  }
+
+  /// Search and read records
+  Future<Map<String, dynamic>> searchRead({
+    required String model,
+    required List<String> fields,
+    List<List<dynamic>>? domain,
+    int? limit,
+  }) async {
+    try {
+      // Ensure we have a valid session
+      final hasSession = await _ensureSession();
+      if (!hasSession) {
+        return {
+          'success': false,
+          'error': 'No valid session. Please login first.',
+        };
+      }
+
+      final payload = {
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'model': model,
+          'method': 'search_read',
+          'args': [domain ?? [], fields],
+          'kwargs': {'limit': limit ?? 100},
+        },
+      };
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.callKwEndpoint),
+            headers: _baseHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      _storeCookies(res);
+
+      if (res.statusCode != 200) {
+        return {'success': false, 'error': 'HTTP Error: ${res.statusCode}'};
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+
+      if (data['error'] != null) {
+        final error = data['error'] as Map<String, dynamic>;
+        return {
+          'success': false,
+          'error':
+              error['data']?['message'] ??
+              error['message'] ??
+              'Failed to search records',
+        };
+      }
+
+      return {'success': true, 'data': data['result']};
+    } catch (e) {
+      return {'success': false, 'error': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// Create record with better error handling
+  Future<Map<String, dynamic>> create({
     required String model,
     required Map<String, dynamic> values,
   }) async {
-    final payload = {
-      'jsonrpc': '2.0',
-      'method': 'call',
-      'params': {
-        'model': model,
-        'method': 'create',
-        'args': [values],
-        'kwargs': {},
-      },
-    };
-    final res = await http.post(
-      _uri('/web/dataset/call_kw'),
-      headers: _baseHeaders,
-      body: jsonEncode(payload),
-    );
-    _storeCookies(res);
-    if (res.statusCode != 200) return null;
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    return data['result'] as int?;
+    try {
+      final payload = {
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'model': model,
+          'method': 'create',
+          'args': [values],
+          'kwargs': {},
+        },
+      };
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.callKwEndpoint),
+            headers: _baseHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      _storeCookies(res);
+
+      if (res.statusCode != 200) {
+        return {
+          'success': false,
+          'error': 'HTTP Error: ${res.statusCode}',
+          'id': null,
+        };
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+
+      if (data['error'] != null) {
+        final error = data['error'] as Map<String, dynamic>;
+        return {
+          'success': false,
+          'error':
+              error['data']?['message'] ??
+              error['message'] ??
+              'Failed to create record',
+          'id': null,
+        };
+      }
+
+      final result = data['result'] as int?;
+      return {
+        'success': true,
+        'id': result,
+        'message': 'Record created successfully',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Network error: ${e.toString()}',
+        'id': null,
+      };
+    }
+  }
+
+  /// Update record
+  Future<Map<String, dynamic>> update({
+    required String model,
+    required int recordId,
+    required Map<String, dynamic> values,
+  }) async {
+    try {
+      final payload = {
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'model': model,
+          'method': 'write',
+          'args': [
+            [recordId],
+            values,
+          ],
+          'kwargs': {},
+        },
+      };
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.callKwEndpoint),
+            headers: _baseHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      _storeCookies(res);
+
+      if (res.statusCode != 200) {
+        return {'success': false, 'error': 'HTTP Error: ${res.statusCode}'};
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+
+      if (data['error'] != null) {
+        final error = data['error'] as Map<String, dynamic>;
+        return {
+          'success': false,
+          'error':
+              error['data']?['message'] ??
+              error['message'] ??
+              'Failed to update record',
+        };
+      }
+
+      return {'success': true, 'message': 'Record updated successfully'};
+    } catch (e) {
+      return {'success': false, 'error': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// Delete record
+  Future<Map<String, dynamic>> delete({
+    required String model,
+    required int recordId,
+  }) async {
+    try {
+      final payload = {
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'model': model,
+          'method': 'unlink',
+          'args': [
+            [recordId],
+          ],
+          'kwargs': {},
+        },
+      };
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.callKwEndpoint),
+            headers: _baseHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      _storeCookies(res);
+
+      if (res.statusCode != 200) {
+        return {'success': false, 'error': 'HTTP Error: ${res.statusCode}'};
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+
+      if (data['error'] != null) {
+        final error = data['error'] as Map<String, dynamic>;
+        return {
+          'success': false,
+          'error':
+              error['data']?['message'] ??
+              error['message'] ??
+              'Failed to delete record',
+        };
+      }
+
+      return {'success': true, 'message': 'Record deleted successfully'};
+    } catch (e) {
+      return {'success': false, 'error': 'Network error: ${e.toString()}'};
+    }
   }
 }
