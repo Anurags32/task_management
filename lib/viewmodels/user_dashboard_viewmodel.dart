@@ -15,6 +15,84 @@ class UserDashboardViewModel extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   Map<String, dynamic>? get currentUser => _currentUser;
 
+  /// Tasks sorted by latest (based on write_date then create_date)
+  List<Map<String, dynamic>> get sortedTasksLatest {
+    if (_tasks.isEmpty) return const [];
+    final sorted = List<Map<String, dynamic>>.from(_tasks);
+    sorted.sort((a, b) {
+      final aWrite = a['write_date']?.toString();
+      final bWrite = b['write_date']?.toString();
+      final aCreate = a['create_date']?.toString();
+      final bCreate = b['create_date']?.toString();
+
+      DateTime? dtA;
+      DateTime? dtB;
+      try {
+        if (aWrite != null && aWrite.isNotEmpty) {
+          dtA = DateTime.parse(aWrite);
+        } else if (aCreate != null && aCreate.isNotEmpty) {
+          dtA = DateTime.parse(aCreate);
+        }
+      } catch (_) {}
+      try {
+        if (bWrite != null && bWrite.isNotEmpty) {
+          dtB = DateTime.parse(bWrite);
+        } else if (bCreate != null && bCreate.isNotEmpty) {
+          dtB = DateTime.parse(bCreate);
+        }
+      } catch (_) {}
+
+      if (dtA == null && dtB == null) return 0;
+      if (dtA == null) return 1;
+      if (dtB == null) return -1;
+      return dtB.compareTo(dtA);
+    });
+    return sorted;
+  }
+
+  /// Get the latest task (most recently created or updated)
+  Map<String, dynamic>? get latestTask {
+    if (_tasks.isEmpty) return null;
+
+    // Sort tasks by creation date (most recent first)
+    final sortedTasks = List<Map<String, dynamic>>.from(_tasks);
+    sortedTasks.sort((a, b) {
+      final dateA = a['create_date'] ?? a['write_date'] ?? '';
+      final dateB = b['create_date'] ?? b['write_date'] ?? '';
+
+      if (dateA == '' && dateB == '') return 0;
+      if (dateA == '') return 1;
+      if (dateB == '') return -1;
+
+      try {
+        final dateTimeA = DateTime.parse(dateA.toString());
+        final dateTimeB = DateTime.parse(dateB.toString());
+        return dateTimeB.compareTo(dateTimeA); // Most recent first
+      } catch (e) {
+        return 0;
+      }
+    });
+
+    return sortedTasks.first;
+  }
+
+  /// Logout current user
+  Future<bool> logout() async {
+    try {
+      await OdooClient.instance.logout();
+      _currentUser = null;
+      _tasks.clear();
+      _projects.clear();
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to logout: ${e.toString()}';
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Load user-specific data
   Future<void> loadUserData() async {
     _isLoading = true;
@@ -77,11 +155,49 @@ class UserDashboardViewModel extends ChangeNotifier {
       // Log available stages for debugging
       await logAvailableStages();
       await checkAvailableModels();
+
+      // Log task states for debugging
+      await logTaskStates();
     } catch (e) {
       _errorMessage = 'Failed to load data: ${e.toString()}';
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Update a task's status (open, in_progress, done) and reflect in UI
+  Future<bool> updateTaskStatus(int taskId, String statusKey) async {
+    try {
+      final idx = _tasks.indexWhere((t) => t['id'] == taskId);
+      if (idx == -1) return false;
+
+      // Determine old state to allow rollback
+      final oldState = _tasks[idx]['state'];
+
+      // Optimistic update in UI using textual state keys
+      _tasks[idx]['state'] = statusKey;
+      notifyListeners();
+
+      // Map kanban_state to complement textual state
+      final kanbanState = statusKey == 'done' ? 'done' : 'normal';
+
+      final result = await TaskService().updateTask(
+        taskId: taskId,
+        state: statusKey,
+        kanban_state: kanbanState,
+      );
+
+      final success = result['success'] == true;
+      if (!success) {
+        // Rollback UI on failure
+        _tasks[idx]['state'] = oldState;
+        _errorMessage = result['error']?.toString();
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -633,5 +749,236 @@ class UserDashboardViewModel extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  /// Log task states for debugging
+  Future<void> logTaskStates() async {
+    try {
+      print('=== Task States Debug Info ===');
+      for (final task in _tasks) {
+        final taskId = task['id'];
+        final taskName = task['name'];
+        final state = task['state'];
+        final stageId = task['stage_id'];
+        print(
+          'Task ID: $taskId, Name: $taskName, State: $state, Stage ID: $stageId',
+        );
+      }
+      print('=== End Task States Debug Info ===');
+    } catch (e) {
+      print('Failed to log task states: $e');
+    }
+  }
+
+  /// Start a task (set to in progress)
+  Future<bool> startTask(int taskId) async {
+    try {
+      print('Attempting to start task with ID: $taskId');
+
+      // Check server connectivity first
+      if (!await checkServerConnectivity()) {
+        _errorMessage =
+            'Cannot connect to server. Please check your internet connection.';
+        notifyListeners();
+        return false;
+      }
+
+      // Check if user is logged in
+      if (_currentUser == null) {
+        _errorMessage = 'User session expired. Please login again.';
+        notifyListeners();
+        return false;
+      }
+
+      // Check if task exists and is assigned to current user
+      final task = _tasks.firstWhere(
+        (task) => task['id'] == taskId,
+        orElse: () => {},
+      );
+
+      if (task.isEmpty) {
+        _errorMessage = 'Task not found or not accessible.';
+        notifyListeners();
+        return false;
+      }
+
+      // Find an "in progress" stage
+      int? inProgressStageId;
+      try {
+        final stagesResult = await TaskService().getTaskStages();
+        if (stagesResult['success'] == true) {
+          final stages = stagesResult['data'] as List<dynamic>?;
+          if (stages != null) {
+            for (final stage in stages) {
+              final stageMap = Map<String, dynamic>.from(stage);
+              final stageName =
+                  stageMap['name']?.toString().toLowerCase() ?? '';
+              if (stageName.contains('progress') ||
+                  stageName.contains('working') ||
+                  stageName.contains('started') ||
+                  stageName.contains('in progress')) {
+                inProgressStageId = stageMap['id'] as int?;
+                print(
+                  'Found in progress stage: ${stageMap['name']} with ID: $inProgressStageId',
+                );
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('Failed to get task stages: $e');
+      }
+
+      // Update the task
+      Map<String, dynamic> result;
+      if (inProgressStageId != null) {
+        result = await TaskService().updateTask(
+          taskId: taskId,
+          stageId: inProgressStageId,
+        );
+      } else {
+        // Fallback: try to update state field with correct Odoo values
+        result = await TaskService().updateTask(
+          taskId: taskId,
+          state: 'open', // Use 'open' instead of '2' for in progress
+        );
+      }
+
+      if (result['success'] == true) {
+        // Update local task state
+        final taskIndex = _tasks.indexWhere((task) => task['id'] == taskId);
+        if (taskIndex != -1) {
+          if (inProgressStageId != null) {
+            _tasks[taskIndex]['stage_id'] = inProgressStageId;
+          }
+          _tasks[taskIndex]['state'] = 'open';
+          print('Successfully updated local task state for task ID: $taskId');
+          notifyListeners();
+        }
+
+        // Refresh the task list
+        await Future.delayed(const Duration(milliseconds: 500));
+        await loadUserData();
+        return true;
+      } else {
+        final errorMsg = result['error'] ?? 'Failed to start task';
+        _errorMessage = errorMsg;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      final errorMsg = 'Failed to start task: ${e.toString()}';
+      print('Exception during task start: $errorMsg');
+      _errorMessage = errorMsg;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Set a task to pending
+  Future<bool> setTaskPending(int taskId) async {
+    try {
+      print('Attempting to set task to pending with ID: $taskId');
+
+      // Check server connectivity first
+      if (!await checkServerConnectivity()) {
+        _errorMessage =
+            'Cannot connect to server. Please check your internet connection.';
+        notifyListeners();
+        return false;
+      }
+
+      // Check if user is logged in
+      if (_currentUser == null) {
+        _errorMessage = 'User session expired. Please login again.';
+        notifyListeners();
+        return false;
+      }
+
+      // Check if task exists and is assigned to current user
+      final task = _tasks.firstWhere(
+        (task) => task['id'] == taskId,
+        orElse: () => {},
+      );
+
+      if (task.isEmpty) {
+        _errorMessage = 'Task not found or not accessible.';
+        notifyListeners();
+        return false;
+      }
+
+      // Find a "pending" stage
+      int? pendingStageId;
+      try {
+        final stagesResult = await TaskService().getTaskStages();
+        if (stagesResult['success'] == true) {
+          final stages = stagesResult['data'] as List<dynamic>?;
+          if (stages != null) {
+            for (final stage in stages) {
+              final stageMap = Map<String, dynamic>.from(stage);
+              final stageName =
+                  stageMap['name']?.toString().toLowerCase() ?? '';
+              if (stageName.contains('pending') ||
+                  stageName.contains('waiting') ||
+                  stageName.contains('on hold') ||
+                  stageName.contains('blocked')) {
+                pendingStageId = stageMap['id'] as int?;
+                print(
+                  'Found pending stage: ${stageMap['name']} with ID: $pendingStageId',
+                );
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('Failed to get task stages: $e');
+      }
+
+      // Update the task
+      Map<String, dynamic> result;
+      if (pendingStageId != null) {
+        result = await TaskService().updateTask(
+          taskId: taskId,
+          stageId: pendingStageId,
+        );
+      } else {
+        // Fallback: try to update state field with correct Odoo values
+        result = await TaskService().updateTask(
+          taskId: taskId,
+          state: 'open', // Use 'open' for pending tasks
+        );
+      }
+
+      if (result['success'] == true) {
+        // Update local task state
+        final taskIndex = _tasks.indexWhere((task) => task['id'] == taskId);
+        if (taskIndex != -1) {
+          if (pendingStageId != null) {
+            _tasks[taskIndex]['stage_id'] = pendingStageId;
+          }
+          _tasks[taskIndex]['state'] = 'open';
+          print('Successfully updated local task state for task ID: $taskId');
+          notifyListeners();
+        }
+
+        // Refresh the task list
+        await Future.delayed(const Duration(milliseconds: 500));
+        await loadUserData();
+        return true;
+      } else {
+        final errorMsg = result['error'] ?? 'Failed to set task pending';
+        _errorMessage = errorMsg;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      final errorMsg = 'Failed to set task pending: ${e.toString()}';
+      print('Exception during task pending: $errorMsg');
+      _errorMessage = errorMsg;
+      notifyListeners();
+      return false;
+    }
   }
 }

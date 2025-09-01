@@ -172,6 +172,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                         ],
                       ),
                     ),
+
+                  // Activity Summary Section
+                  if (tasks.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _buildActivitySummaryCard(
+                      List<Map<String, dynamic>>.from(tasks),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -409,20 +417,55 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _getTaskStatusColor(task['state']).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _getTaskStatusText(task['state']),
-                  style: TextStyle(
-                    color: _getTaskStatusColor(task['state']),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _getTaskStatusColor(
+                        task['state'],
+                      ).withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _getTaskStatusText(task['state']),
+                      style: TextStyle(
+                        color: _getTaskStatusColor(task['state']),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
+                  if (task['stage_id'] != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.grey.shade300,
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Text(
+                        _getStageName(task['stage_id']),
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -440,24 +483,36 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           ],
           if (assignedUsers.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text.rich(
-              TextSpan(
-                text: "Assigned to ",
-                style: const TextStyle(color: Colors.black54, fontSize: 12),
-                children: [
-                  TextSpan(
-                    text: assignedUsers
-                        .map(
-                          (user) => _stripHtmlTags(user['name'] ?? 'Unknown'),
-                        )
-                        .join(', '),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+            Row(
+              children: [
+                Icon(Icons.person, size: 14, color: Colors.blue.shade600),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      text: "Assigned to ",
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 12,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: assignedUsers
+                              .map(
+                                (user) =>
+                                    _stripHtmlTags(user['name'] ?? 'Unknown'),
+                              )
+                              .join(', '),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
           if (task['date_deadline'] != null) ...[
@@ -472,6 +527,24 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     color: Colors.orange.shade600,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          // Last Updated Information
+          if (task['write_date'] != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.update, size: 14, color: Colors.grey.shade600),
+                const SizedBox(width: 4),
+                Text(
+                  'Last updated: ${_formatDate(task['write_date'])}',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
@@ -542,12 +615,17 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   Color _getTaskStatusColor(String? state) {
     switch (state) {
       case '1':
+      case 'open':
+      case 'draft':
         return Colors.blue;
       case '2':
+      case 'in_progress':
         return Colors.orange;
       case '3':
+      case 'done':
         return Colors.green;
       case '4':
+      case 'cancelled':
         return Colors.red;
       default:
         return Colors.grey;
@@ -557,13 +635,19 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   String _getTaskStatusText(String? state) {
     switch (state) {
       case '1':
+      case 'open':
         return 'Open';
       case '2':
+      case 'in_progress':
         return 'In Progress';
       case '3':
+      case 'done':
         return 'Done';
       case '4':
+      case 'cancelled':
         return 'Cancelled';
+      case 'draft':
+        return 'Draft';
       default:
         return 'Unknown';
     }
@@ -609,5 +693,94 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   bool _isValidDate(dynamic date) {
     return date != null && date.toString().isNotEmpty;
+  }
+
+  // Get stage name from stage_id
+  String _getStageName(dynamic stageId) {
+    if (stageId == null) return '';
+
+    if (stageId is List && stageId.length > 1) {
+      return stageId[1]?.toString() ?? 'Unknown Stage';
+    } else if (stageId is int) {
+      return 'Stage $stageId';
+    } else {
+      return stageId.toString();
+    }
+  }
+
+  Widget _buildActivitySummaryCard(List<Map<String, dynamic>> tasks) {
+    final openTasks = tasks
+        .where(
+          (task) =>
+              task['state'] == '1' ||
+              task['state'] == 'open' ||
+              task['state'] == 'draft',
+        )
+        .length;
+    final inProgressTasks = tasks
+        .where((task) => task['state'] == '2' || task['state'] == 'in_progress')
+        .length;
+    final doneTasks = tasks
+        .where((task) => task['state'] == '3' || task['state'] == 'done')
+        .length;
+    final cancelledTasks = tasks
+        .where((task) => task['state'] == '4' || task['state'] == 'cancelled')
+        .length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Activity Summary",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          _buildActivityItem("Open Tasks", openTasks, Colors.blue),
+          const SizedBox(height: 12),
+          _buildActivityItem(
+            "In Progress Tasks",
+            inProgressTasks,
+            Colors.orange,
+          ),
+          const SizedBox(height: 12),
+          _buildActivityItem("Done Tasks", doneTasks, Colors.green),
+          const SizedBox(height: 12),
+          _buildActivityItem("Cancelled Tasks", cancelledTasks, Colors.red),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityItem(String title, int count, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(5),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$title: $count',
+          style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+        ),
+      ],
+    );
   }
 }

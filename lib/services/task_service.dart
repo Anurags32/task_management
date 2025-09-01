@@ -634,4 +634,41 @@ class TaskService {
       limit: 100,
     );
   }
+
+  /// Get valid state values for tasks by checking existing tasks
+  Future<Map<String, dynamic>> getTaskStateValues() async {
+    try {
+      // Get a few tasks to see what state values are actually used
+      final result = await getAllTasks();
+      if (result['success'] == true && result['data'] != null) {
+        final tasks = result['data'] as List<dynamic>;
+        final stateValues = <String>{};
+        
+        for (final task in tasks) {
+          final taskMap = Map<String, dynamic>.from(task);
+          final state = taskMap['state']?.toString();
+          if (state != null && state.isNotEmpty) {
+            stateValues.add(state);
+          }
+        }
+        
+        print('Found task state values: $stateValues');
+        
+        // Return the valid state values we found
+        return {
+          'success': true,
+          'data': stateValues.toList(),
+        };
+      }
+      
+      // Fallback: return common Odoo task state values
+      return {
+        'success': true,
+        'data': ['draft', 'open', 'done', 'cancelled'],
+      };
+    } catch (e) {
+      print('Failed to get task state values: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }
