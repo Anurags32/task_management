@@ -313,8 +313,9 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
                         color: Colors.orange.shade600,
                       ),
                       const SizedBox(width: 4),
+
                       Text(
-                        'Deadline: ${_formatDate(latestTask['date_deadline'])}',
+                        'Deadline: ${_formatDate(latestTask['write_date'])}',
                         style: TextStyle(
                           color: Colors.orange.shade600,
                           fontSize: 12,
@@ -635,11 +636,29 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
                   ),
                 ),
                 const Spacer(),
+                if (task['date_start'] != null) ...[
+                  Icon(
+                    Icons.play_arrow,
+                    size: 14,
+                    color: Colors.green.shade600,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Start: ${_formatDate(task['date_start'])}',
+                    style: TextStyle(
+                      color: Colors.green.shade600,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+                if (task['date_start'] != null && task['date_deadline'] != null)
+                  const SizedBox(width: 8),
                 if (task['date_deadline'] != null) ...[
                   Icon(Icons.schedule, size: 14, color: Colors.orange.shade600),
                   const SizedBox(width: 4),
                   Text(
-                    'Deadline: ${_formatDate(task['date_deadline'])}',
+                    'Deadline: ${_formatDate(task['write_date'])}',
                     style: TextStyle(
                       color: Colors.orange.shade600,
                       fontSize: 10,
@@ -675,6 +694,7 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
             DropdownMenuItem(value: 'open', child: Text('Not Started')),
             DropdownMenuItem(value: 'in_progress', child: Text('In Progress')),
             DropdownMenuItem(value: 'done', child: Text('Completed')),
+            DropdownMenuItem(value: 'hold', child: Text("On Hold")),
           ],
           onChanged: (value) async {
             if (value == null) return;
@@ -700,6 +720,9 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
         return 'in_progress';
       case '3':
       case 'done':
+        return 'done';
+      case '4':
+      case 'hold':
         return 'done';
       default:
         return 'open';
@@ -953,7 +976,7 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
     if (date == null) return 'N/A';
     try {
       final dateTime = DateTime.parse(date.toString());
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
     } catch (e) {
       return date.toString();
     }

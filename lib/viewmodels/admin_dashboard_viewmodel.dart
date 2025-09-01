@@ -11,6 +11,27 @@ class AdminDashboardViewModel extends ChangeNotifier {
   Map<String, dynamic>? _currentUser;
 
   List<Map<String, dynamic>> get projects => List.unmodifiable(_projects);
+  List<Map<String, dynamic>> get sortedProjects {
+    final sorted = List<Map<String, dynamic>>.from(_projects);
+    sorted.sort((a, b) {
+      // Sort by creation date (latest first)
+      final aDate = a['create_date'] ?? a['write_date'] ?? '';
+      final bDate = b['create_date'] ?? b['write_date'] ?? '';
+      
+      if (aDate == '' && bDate == '') return 0;
+      if (aDate == '') return 1;
+      if (bDate == '') return -1;
+      
+      try {
+        final aDateTime = DateTime.parse(aDate);
+        final bDateTime = DateTime.parse(bDate);
+        return bDateTime.compareTo(aDateTime); // Latest first
+      } catch (e) {
+        return 0;
+      }
+    });
+    return sorted;
+  }
   List<Map<String, dynamic>> get tasks => List.unmodifiable(_tasks);
   List<Map<String, dynamic>> get users => List.unmodifiable(_users);
   bool get isRefreshing => _isRefreshing;

@@ -162,6 +162,7 @@ class TaskService {
     int? stageId,
     String? priority,
     DateTime? deadline,
+    DateTime? dateStart,
   }) async {
     final values = <String, dynamic>{'name': name, 'description': description};
 
@@ -178,9 +179,10 @@ class TaskService {
       values['priority'] = priority;
     }
     if (deadline != null) {
-      values['date_deadline'] = deadline.toIso8601String().split(
-        'T',
-      )[0]; // Only date part YYYY-MM-DD
+      values['date_deadline'] = deadline.toIso8601String();
+    }
+    if (dateStart != null) {
+      values['date_start'] = dateStart.toIso8601String();
     }
 
     return await OdooClient.instance.create(
@@ -643,7 +645,7 @@ class TaskService {
       if (result['success'] == true && result['data'] != null) {
         final tasks = result['data'] as List<dynamic>;
         final stateValues = <String>{};
-        
+
         for (final task in tasks) {
           final taskMap = Map<String, dynamic>.from(task);
           final state = taskMap['state']?.toString();
@@ -651,16 +653,13 @@ class TaskService {
             stateValues.add(state);
           }
         }
-        
+
         print('Found task state values: $stateValues');
-        
+
         // Return the valid state values we found
-        return {
-          'success': true,
-          'data': stateValues.toList(),
-        };
+        return {'success': true, 'data': stateValues.toList()};
       }
-      
+
       // Fallback: return common Odoo task state values
       return {
         'success': true,

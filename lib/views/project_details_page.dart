@@ -515,6 +515,23 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
               ],
             ),
           ],
+          if (task['date_start'] != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.play_arrow, size: 14, color: Colors.green.shade600),
+                const SizedBox(width: 4),
+                Text(
+                  'Start: ${_formatDate(task['date_start'])}',
+                  style: TextStyle(
+                    color: Colors.green.shade600,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (task['date_deadline'] != null) ...[
             const SizedBox(height: 8),
             Row(
@@ -522,7 +539,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                 Icon(Icons.schedule, size: 14, color: Colors.orange.shade600),
                 const SizedBox(width: 4),
                 Text(
-                  'Deadline: ${_formatDate(task['date_deadline'])}',
+                  'Deadline: ${_formatDate(task['write_date'])}',
                   style: TextStyle(
                     color: Colors.orange.shade600,
                     fontSize: 12,
@@ -533,23 +550,23 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             ),
           ],
           // Last Updated Information
-          if (task['write_date'] != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.update, size: 14, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Text(
-                  'Last updated: ${_formatDate(task['write_date'])}',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ],
+          // if (task['write_date'] != null) ...[
+          //   const SizedBox(height: 8),
+          //   Row(
+          //     children: [
+          //       Icon(Icons.update, size: 14, color: Colors.grey.shade600),
+          //       const SizedBox(width: 4),
+          //       Text(
+          //         'Last updated: ${_formatDate(task['write_date'])}',
+          //         style: TextStyle(
+          //           color: Colors.grey.shade600,
+          //           fontSize: 11,
+          //           fontWeight: FontWeight.w400,
+          //         ),
+          //       ),
+          //     ],
+          //   ),
+          // ],
         ],
       ),
     );
@@ -670,7 +687,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     if (date == null) return 'N/A';
     try {
       final dateTime = DateTime.parse(date.toString());
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
     } catch (e) {
       return date.toString();
     }

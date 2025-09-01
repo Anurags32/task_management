@@ -29,9 +29,11 @@ class TaskDetailsPage extends StatelessWidget {
             const SizedBox(height: 20),
 
             // Task Description Card
-            if (task['description'] != null && task['description'].toString().isNotEmpty)
+            if (task['description'] != null &&
+                task['description'].toString().isNotEmpty)
               _buildDescriptionCard(),
-            if (task['description'] != null && task['description'].toString().isNotEmpty)
+            if (task['description'] != null &&
+                task['description'].toString().isNotEmpty)
               const SizedBox(height: 20),
 
             // Task Details Card
@@ -48,16 +50,13 @@ class TaskDetailsPage extends StatelessWidget {
 
   Widget _buildTaskHeaderCard() {
     final isCompleted = _isTaskCompleted(task);
-    
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            Colors.blue.shade50,
-            Colors.purple.shade50,
-          ],
+          colors: [Colors.blue.shade50, Colors.purple.shade50],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -104,15 +103,24 @@ class TaskDetailsPage extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        decoration: isCompleted ? TextDecoration.lineThrough : null,
-                        color: isCompleted ? Colors.grey.shade600 : Colors.black87,
+                        decoration: isCompleted
+                            ? TextDecoration.lineThrough
+                            : null,
+                        color: isCompleted
+                            ? Colors.grey.shade600
+                            : Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        color: _getTaskStatusColor(task['state']).withOpacity(0.2),
+                        color: _getTaskStatusColor(
+                          task['state'],
+                        ).withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: _getTaskStatusColor(task['state']),
@@ -162,10 +170,7 @@ class TaskDetailsPage extends StatelessWidget {
               const SizedBox(width: 12),
               const Text(
                 'Description',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -207,15 +212,12 @@ class TaskDetailsPage extends StatelessWidget {
               const SizedBox(width: 12),
               const Text(
                 'Task Information',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          
+
           // Priority
           _buildDetailRow(
             'Priority',
@@ -223,9 +225,9 @@ class TaskDetailsPage extends StatelessWidget {
             _getTaskPriorityIcon(task['priority']),
             _getTaskPriorityColor(task['priority']),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Created Date
           if (task['create_date'] != null)
             _buildDetailRow(
@@ -234,20 +236,31 @@ class TaskDetailsPage extends StatelessWidget {
               Icons.calendar_today,
               Colors.blue.shade600,
             ),
-          
+
           if (task['create_date'] != null) const SizedBox(height: 16),
-          
+
+          // Start Date
+          if (task['date_start'] != null)
+            _buildDetailRow(
+              'Start Date',
+              _formatDate(task['date_start']),
+              Icons.play_arrow,
+              Colors.green.shade600,
+            ),
+
+          if (task['date_start'] != null) const SizedBox(height: 16),
+
           // Deadline
           if (task['date_deadline'] != null)
             _buildDetailRow(
               'Deadline',
-              _formatDate(task['date_deadline']),
+              _formatDate(task['write_date']),
               Icons.schedule,
               Colors.orange.shade600,
             ),
-          
+
           if (task['date_deadline'] != null) const SizedBox(height: 16),
-          
+
           // Last Updated
           if (task['write_date'] != null)
             _buildDetailRow(
@@ -256,9 +269,9 @@ class TaskDetailsPage extends StatelessWidget {
               Icons.update,
               Colors.purple.shade600,
             ),
-          
+
           if (task['write_date'] != null) const SizedBox(height: 16),
-          
+
           // Task ID
           _buildDetailRow(
             'Task ID',
@@ -271,7 +284,12 @@ class TaskDetailsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, IconData icon, Color color) {
+  Widget _buildDetailRow(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Row(
       children: [
         Container(
@@ -313,7 +331,7 @@ class TaskDetailsPage extends StatelessWidget {
 
   Widget _buildActionsCard(BuildContext context) {
     final isCompleted = _isTaskCompleted(task);
-    
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -333,19 +351,20 @@ class TaskDetailsPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.play_circle_outline, color: Colors.blue.shade600, size: 24),
+              Icon(
+                Icons.play_circle_outline,
+                color: Colors.blue.shade600,
+                size: 24,
+              ),
               const SizedBox(width: 12),
               const Text(
                 'Task Actions',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          
+
           if (!isCompleted) ...[
             // Start Task Button
             if (_canStartTask(task))
@@ -356,9 +375,9 @@ class TaskDetailsPage extends StatelessWidget {
                 Colors.blue,
                 () => _showStartTaskDialog(context),
               ),
-            
+
             if (_canStartTask(task)) const SizedBox(height: 12),
-            
+
             // Set Pending Button
             if (_canSetPending(task))
               _buildActionButton(
@@ -368,9 +387,9 @@ class TaskDetailsPage extends StatelessWidget {
                 Colors.orange,
                 () => _showPendingTaskDialog(context),
               ),
-            
+
             if (_canSetPending(task)) const SizedBox(height: 12),
-            
+
             // Complete Task Button
             _buildActionButton(
               context,
@@ -390,7 +409,11 @@ class TaskDetailsPage extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
+                  Icon(
+                    Icons.check_circle,
+                    color: Colors.green.shade600,
+                    size: 24,
+                  ),
                   const SizedBox(width: 12),
                   Text(
                     'Task Completed',
@@ -622,7 +645,9 @@ class TaskDetailsPage extends StatelessWidget {
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(vm.errorMessage ?? 'Failed to start task'),
+                        content: Text(
+                          vm.errorMessage ?? 'Failed to start task',
+                        ),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -678,7 +703,9 @@ class TaskDetailsPage extends StatelessWidget {
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(vm.errorMessage ?? 'Failed to set task pending'),
+                        content: Text(
+                          vm.errorMessage ?? 'Failed to set task pending',
+                        ),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -734,7 +761,9 @@ class TaskDetailsPage extends StatelessWidget {
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(vm.errorMessage ?? 'Failed to complete task'),
+                        content: Text(
+                          vm.errorMessage ?? 'Failed to complete task',
+                        ),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -747,4 +776,4 @@ class TaskDetailsPage extends StatelessWidget {
       },
     );
   }
-} 
+}

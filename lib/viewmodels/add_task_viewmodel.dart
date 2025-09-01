@@ -15,6 +15,10 @@ class AddTaskViewModel extends ChangeNotifier {
   int? _selectedAssigneeId;
   String _selectedPriority = '0';
   DateTime? _deadline;
+  DateTime? _startDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
+  String? _allottedTime;
   Map<String, dynamic>? _currentUser;
 
   bool get isSubmitting => _isSubmitting;
@@ -26,6 +30,10 @@ class AddTaskViewModel extends ChangeNotifier {
   int? get selectedAssigneeId => _selectedAssigneeId;
   String get selectedPriority => _selectedPriority;
   DateTime? get deadline => _deadline;
+  DateTime? get startDate => _startDate;
+  TimeOfDay? get startTime => _startTime;
+  TimeOfDay? get endTime => _endTime;
+  String? get allottedTime => _allottedTime;
   Map<String, dynamic>? get currentUser => _currentUser;
 
   /// Load initial data (projects, users, stages)
@@ -111,6 +119,58 @@ class AddTaskViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set start date
+  void setStartDate(DateTime? startDate) {
+    _startDate = startDate;
+    notifyListeners();
+  }
+
+  /// Set start time
+  void setStartTime(TimeOfDay? startTime) {
+    _startTime = startTime;
+    notifyListeners();
+  }
+
+  /// Set end time
+  void setEndTime(TimeOfDay? endTime) {
+    _endTime = endTime;
+    notifyListeners();
+  }
+
+  /// Set allotted time
+  void setAllottedTime(String? allottedTime) {
+    _allottedTime = allottedTime;
+    notifyListeners();
+  }
+
+  /// Get deadline with time
+  DateTime? getDeadlineWithTime() {
+    if (_deadline == null) return null;
+    if (_endTime == null) return _deadline;
+
+    return DateTime(
+      _deadline!.year,
+      _deadline!.month,
+      _deadline!.day,
+      _endTime!.hour,
+      _endTime!.minute,
+    );
+  }
+
+  /// Get start date with time
+  DateTime? getStartDateWithTime() {
+    if (_startDate == null) return null;
+    if (_startTime == null) return _startDate;
+
+    return DateTime(
+      _startDate!.year,
+      _startDate!.month,
+      _startDate!.day,
+      _startTime!.hour,
+      _startTime!.minute,
+    );
+  }
+
   /// Clear error message
   void clearError() {
     _errorMessage = null;
@@ -139,7 +199,8 @@ class AddTaskViewModel extends ChangeNotifier {
         projectId: _selectedProjectId,
         userIds: _selectedAssigneeId != null ? [_selectedAssigneeId!] : null,
         priority: _selectedPriority,
-        deadline: _deadline,
+        deadline: getDeadlineWithTime(),
+        dateStart: getStartDateWithTime(),
       );
 
       if (result['success'] == true) {

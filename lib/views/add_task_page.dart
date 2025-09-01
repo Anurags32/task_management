@@ -170,16 +170,35 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             // Start Date
                             _buildDateCard(
                               label: "Start Date",
-                              date: DateTime.now().add(const Duration(days: 1)),
+                              date:
+                                  vm.startDate ??
+                                  DateTime.now().add(const Duration(days: 1)),
                               onTap: () async {
-                                await showDatePicker(
+                                final date = await showDatePicker(
                                   context: context,
-                                  initialDate: DateTime.now().add(
-                                    const Duration(days: 1),
-                                  ),
+                                  initialDate:
+                                      vm.startDate ??
+                                      DateTime.now().add(
+                                        const Duration(days: 1),
+                                      ),
                                   firstDate: DateTime(2020),
                                   lastDate: DateTime(2030),
                                 );
+                                if (date != null) vm.setStartDate(date);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Start Time
+                            _buildTimeCard(
+                              label: "Start Time",
+                              time: vm.startTime,
+                              onTap: () async {
+                                final time = await showTimePicker(
+                                  context: context,
+                                  initialTime: vm.startTime ?? TimeOfDay.now(),
+                                );
+                                if (time != null) vm.setStartTime(time);
                               },
                             ),
                             const SizedBox(height: 16),
@@ -206,6 +225,20 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             ),
                             const SizedBox(height: 16),
 
+                            // End Time
+                            _buildTimeCard(
+                              label: "End Time",
+                              time: vm.endTime,
+                              onTap: () async {
+                                final time = await showTimePicker(
+                                  context: context,
+                                  initialTime: vm.endTime ?? TimeOfDay.now(),
+                                );
+                                if (time != null) vm.setEndTime(time);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
                             // Allotted Time
                             _buildCard(
                               child: Column(
@@ -214,7 +247,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   _label("Allotted Time"),
                                   const SizedBox(height: 8),
                                   DropdownButtonFormField<String>(
-                                    value: null,
+                                    value: vm.allottedTime,
                                     decoration: _dropdownDecoration(),
                                     hint: const Text("Select Hours"),
                                     items: const [
@@ -248,7 +281,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                       ),
                                     ],
                                     onChanged: (value) {
-                                      // TODO: Add allotted time to ViewModel
+                                      vm.setAllottedTime(value);
                                     },
                                   ),
                                 ],
@@ -397,6 +430,35 @@ class _AddTaskPageState extends State<AddTaskPage> {
             Expanded(
               child: Text(
                 date != null ? "${date.day}-${date.month}-${date.year}" : label,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeCard({
+    required String label,
+    required TimeOfDay? time,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: _buildCard(
+        child: Row(
+          children: [
+            const Icon(Icons.access_time, color: Colors.purple),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                time != null ? time.format(context) : label,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
