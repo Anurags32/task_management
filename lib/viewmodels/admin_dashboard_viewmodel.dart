@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:task_management/services/task_service.dart';
 import 'package:task_management/services/odoo_client.dart';
+import 'package:task_management/services/notification_service.dart';
 
 class AdminDashboardViewModel extends ChangeNotifier {
   final List<Map<String, dynamic>> _projects = <Map<String, dynamic>>[];
@@ -10,6 +12,9 @@ class AdminDashboardViewModel extends ChangeNotifier {
   String? _errorMessage;
   Map<String, dynamic>? _currentUser;
 
+  // Listen to push events to auto-refresh on task status updates
+  StreamSubscription<Map<String, dynamic>>? _pushSub;
+
   List<Map<String, dynamic>> get projects => List.unmodifiable(_projects);
   List<Map<String, dynamic>> get sortedProjects {
     final sorted = List<Map<String, dynamic>>.from(_projects);
@@ -17,11 +22,11 @@ class AdminDashboardViewModel extends ChangeNotifier {
       // Sort by creation date (latest first)
       final aDate = a['create_date'] ?? a['write_date'] ?? '';
       final bDate = b['create_date'] ?? b['write_date'] ?? '';
-      
+
       if (aDate == '' && bDate == '') return 0;
       if (aDate == '') return 1;
       if (bDate == '') return -1;
-      
+
       try {
         final aDateTime = DateTime.parse(aDate);
         final bDateTime = DateTime.parse(bDate);
@@ -32,6 +37,7 @@ class AdminDashboardViewModel extends ChangeNotifier {
     });
     return sorted;
   }
+
   List<Map<String, dynamic>> get tasks => List.unmodifiable(_tasks);
   List<Map<String, dynamic>> get users => List.unmodifiable(_users);
   bool get isRefreshing => _isRefreshing;
@@ -40,7 +46,20 @@ class AdminDashboardViewModel extends ChangeNotifier {
 
   AdminDashboardViewModel() {
     _currentUser = OdooClient.instance.currentUser;
+    _subscribeToPushEvents();
     refresh();
+  }
+
+  void _subscribeToPushEvents() {
+    try {
+      _pushSub?.cancel();
+      _pushSub = NotificationService().events.listen((event) async {
+        if (event['type'] == 'task_status' ||
+            event['type'] == 'task_assigned') {
+          await refresh();
+        }
+      });
+    } catch (_) {}
   }
 
   /// Refresh data
@@ -219,6 +238,12 @@ class AdminDashboardViewModel extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  @override
+  void dispose() {
+    _pushSub?.cancel();
+    super.dispose();
   }
 
   Future<bool> createTask({

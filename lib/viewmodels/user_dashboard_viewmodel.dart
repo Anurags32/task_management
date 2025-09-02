@@ -18,6 +18,36 @@ class UserDashboardViewModel extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   Map<String, dynamic>? get currentUser => _currentUser;
 
+  // Listen to push events to auto-refresh data
+  StreamSubscription<Map<String, dynamic>>? _pushSub;
+
+  UserDashboardViewModel() {
+    _subscribeToPushEvents();
+  }
+
+  void _subscribeToPushEvents() {
+    try {
+      // Auto-refresh tasks when a task_assigned push arrives
+      _pushSub?.cancel();
+      _pushSub = NotificationService().events.listen((event) async {
+        if (event['type'] == 'task_assigned') {
+          final uid = _currentUser?['uid'] as int?;
+          if (uid != null) {
+            await loadUserData();
+          }
+        }
+      });
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  @override
+  void dispose() {
+    _pushSub?.cancel();
+    super.dispose();
+  }
+
   /// Tasks sorted by latest (based on write_date then create_date)
   List<Map<String, dynamic>> get sortedTasksLatest {
     if (_tasks.isEmpty) return const [];
@@ -320,49 +350,185 @@ class UserDashboardViewModel extends ChangeNotifier {
     }
   }
 
-  /// Update a task's status (open, in_progress, done) and reflect in UI
+  /// Update a task's status (open/in_progress/done/hold), prefer stage moves, notify admin
   Future<bool> updateTaskStatus(int taskId, String statusKey) async {
     try {
       final idx = _tasks.indexWhere((t) => t['id'] == taskId);
       if (idx == -1) return false;
 
-      // Determine old state to allow rollback
       final oldState = _tasks[idx]['state'];
-
-      // Optimistic update in UI using textual state keys
-      _tasks[idx]['state'] = statusKey;
+      _tasks[idx]['state'] = statusKey; // optimistic UI
       notifyListeners();
 
-      // Map kanban_state to complement textual state
-      final kanbanState = statusKey == 'done' ? 'done' : 'normal';
+      // Try to map the requested status to a stage
+      int? desiredStageId;
+      try {
+        final stagesResult = await TaskService().getTaskStages();
+        if (stagesResult['success'] == true) {
+          final stages = stagesResult['data'] as List<dynamic>?;
+          if (stages != null) {
+            for (final s in stages) {
+              final m = Map<String, dynamic>.from(s);
+              final name = (m['name']?.toString().toLowerCase() ?? '');
+              if (statusKey == 'done' &&
+                  (name.contains('done') || name.contains('complete'))) {
+                desiredStageId = m['id'] as int?;
+                break;
+              }
+              if (statusKey == 'in_progress' &&
+                  (name.contains('progress') ||
+                      name.contains('working') ||
+                      name.contains('started'))) {
+                desiredStageId = m['id'] as int?;
+                break;
+              }
+              if (statusKey == 'hold' &&
+                  (name.contains('hold') ||
+                      name.contains('waiting') ||
+                      name.contains('blocked'))) {
+                desiredStageId = m['id'] as int?;
+                break;
+              }
+              if (statusKey == 'open' &&
+                  (name.contains('new') ||
+                      name.contains('todo') ||
+                      name.contains('backlog') ||
+                      name.contains('open'))) {
+                desiredStageId = m['id'] as int?;
+                break;
+              }
+            }
+          }
+        }
+      } catch (_) {}
 
-      final result = await TaskService().updateTask(
-        taskId: taskId,
-        state: statusKey,
-        kanban_state: kanbanState,
-      );
+      Map<String, dynamic> result;
+      if (desiredStageId == null) {
+        // Try alternative stage discovery from existing tasks
+        try {
+          final alt = await TaskService().getStagesFromTasks();
+          if (alt['success'] == true) {
+            final stages =
+                (alt['data'] as List<dynamic>?)
+                    ?.map((e) => Map<String, dynamic>.from(e))
+                    .toList() ??
+                [];
+            if (stages.isNotEmpty) {
+              int? pick;
+              if (statusKey == 'done') {
+                stages.sort(
+                  (a, b) => (a['sequence'] ?? 0).compareTo(b['sequence'] ?? 0),
+                );
+                pick = stages.last['id'] as int?;
+              } else if (statusKey == 'in_progress') {
+                final match = stages.firstWhere(
+                  (m) => (m['name']?.toString().toLowerCase() ?? '').contains(
+                    'progress',
+                  ),
+                  orElse: () => stages.first,
+                );
+                pick = match['id'] as int?;
+              } else if (statusKey == 'hold') {
+                final match = stages.firstWhere((m) {
+                  final n = (m['name']?.toString().toLowerCase() ?? '');
+                  return n.contains('hold') ||
+                      n.contains('waiting') ||
+                      n.contains('blocked');
+                }, orElse: () => stages.first);
+                pick = match['id'] as int?;
+              } else {
+                stages.sort(
+                  (a, b) => (a['sequence'] ?? 0).compareTo(b['sequence'] ?? 0),
+                );
+                pick = stages.first['id'] as int?;
+              }
+              desiredStageId = pick;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (desiredStageId != null) {
+        result = await TaskService().updateTask(
+          taskId: taskId,
+          stageId: desiredStageId,
+        );
+      } else if (statusKey == 'done') {
+        // As a last resort for completion, try built-in simple completion
+        result = await TaskService().completeTaskSimple(taskId);
+      } else {
+        result = {
+          'success': false,
+          'error': 'No suitable stage available for update',
+        };
+      }
 
       final success = result['success'] == true;
       if (!success) {
-        // Rollback UI on failure
-        _tasks[idx]['state'] = oldState;
+        _tasks[idx]['state'] = oldState; // rollback
         _errorMessage = result['error']?.toString();
         notifyListeners();
-      } else {
-        // Handle notifications for task completion
-        if (statusKey == 'done') {
-          try {
-            // Cancel any scheduled notifications for this task on user device
-            await NotificationService().cancelTaskNotifications(taskId);
-            print(
-              'Cancelled scheduled notifications for completed task $taskId',
+        return false;
+      }
+
+      // On completion, cancel device schedules
+      if (statusKey == 'done') {
+        try {
+          await NotificationService().cancelTaskNotifications(taskId);
+        } catch (_) {}
+      }
+
+      // Ensure admins receive push about this status
+      try {
+        // Fetch task name for better message
+        String taskName = 'Task';
+        try {
+          final taskInfo = await OdooClient.instance.searchRead(
+            model: 'project.task',
+            fields: ['id', 'name'],
+            domain: [
+              ['id', '=', taskId],
+            ],
+            limit: 1,
+          );
+          if (taskInfo['success'] == true) {
+            final list = taskInfo['data'] as List<dynamic>?;
+            if (list != null && list.isNotEmpty) {
+              final m = Map<String, dynamic>.from(list.first);
+              taskName = (m['name']?.toString() ?? taskName);
+            }
+          }
+        } catch (_) {}
+
+        final adminsResult = await TaskService().getAdminUsers();
+        if (adminsResult['success'] == true) {
+          final admins =
+              (adminsResult['data'] as List<dynamic>?)
+                  ?.map((e) => Map<String, dynamic>.from(e))
+                  .toList() ??
+              [];
+          final adminIds = admins.map((u) => u['id']).whereType<int>().toList();
+          if (adminIds.isNotEmpty) {
+            await OdooClient.instance.sendTaskStatusNotification(
+              userIds: adminIds,
+              taskId: taskId,
+              taskName: taskName,
+              status: statusKey,
+              stageId: desiredStageId,
             );
-          } catch (e) {
-            print('Error handling task completion notifications: $e');
           }
         }
+      } catch (e) {
+        print('Failed to send admin status notification: $e');
       }
-      return success;
+
+      // Refresh once to ensure UI reflects server values everywhere
+      try {
+        await Future.delayed(const Duration(milliseconds: 300));
+        await loadUserData();
+      } catch (_) {}
+
+      return true;
     } catch (e) {
       return false;
     }

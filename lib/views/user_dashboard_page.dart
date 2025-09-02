@@ -506,11 +506,8 @@ class _UserDashboardPageState extends State<UserDashboardPage>
     UserDashboardViewModel vm,
     Map<String, dynamic> task,
   ) {
-    // Check if task is completed
-    bool isCompleted = false;
-    if (task['state'] == '3') {
-      isCompleted = true;
-    }
+    final status = _normalizedStatusForTask(task);
+    final bool isCompleted = status == 'done';
 
     final projectName = _getProjectName(vm, task);
 
@@ -536,7 +533,7 @@ class _UserDashboardPageState extends State<UserDashboardPage>
               children: [
                 Icon(
                   _getTaskIcon(task),
-                  color: _getTaskStatusColor(task['state']),
+                  color: _getTaskStatusColor(status),
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -640,13 +637,13 @@ class _UserDashboardPageState extends State<UserDashboardPage>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: _getTaskStatusColor(task['state']).withOpacity(0.2),
+                    color: _getTaskStatusColor(status).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    _getTaskStatusText(task['state']),
+                    _getTaskStatusText(status),
                     style: TextStyle(
-                      color: _getTaskStatusColor(task['state']),
+                      color: _getTaskStatusColor(status),
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),
@@ -726,24 +723,51 @@ class _UserDashboardPageState extends State<UserDashboardPage>
 
   String _normalizeState(dynamic state) {
     if (state == null) return 'open';
-    final s = state.toString();
-    switch (s) {
-      case '1':
-      case 'draft':
-      case 'open':
-        return 'open';
-      case '2':
-      case 'in_progress':
-        return 'in_progress';
-      case '3':
-      case 'done':
-        return 'done';
-      case '4':
-      case 'hold':
-        return 'done';
-      default:
-        return 'open';
+    final s = state.toString().toLowerCase();
+    // Common numeric codes
+    if (s == '1') return 'open';
+    if (s == '2') return 'in_progress';
+    if (s == '3') return 'done';
+    if (s == '4') return 'hold';
+
+    // Textual and custom variants from server (e.g., '01_in_progress', '1_done')
+    if (s.contains('progress')) return 'in_progress';
+    if (s.contains('done') || s.contains('complete')) return 'done';
+    if (s.contains('hold') || s.contains('waiting') || s.contains('blocked')) {
+      return 'hold';
     }
+    if (s.contains('cancel')) return 'cancelled';
+    if (s.contains('open') || s.contains('draft') || s.contains('todo')) {
+      return 'open';
+    }
+    return 'open';
+  }
+
+  // Prefer stage name when available, else normalize state
+  String _normalizedStatusForTask(Map<String, dynamic> task) {
+    try {
+      final stage = task['stage_id'];
+      if (stage is List && stage.length >= 2) {
+        final stageName = stage[1]?.toString().toLowerCase() ?? '';
+        if (stageName.contains('done') || stageName.contains('complete')) {
+          return 'done';
+        }
+        if (stageName.contains('progress') || stageName.contains('working')) {
+          return 'in_progress';
+        }
+        if (stageName.contains('hold') ||
+            stageName.contains('waiting') ||
+            stageName.contains('blocked')) {
+          return 'hold';
+        }
+        if (stageName.contains('open') ||
+            stageName.contains('todo') ||
+            stageName.contains('new')) {
+          return 'open';
+        }
+      }
+    } catch (_) {}
+    return _normalizeState(task['state']);
   }
 
   Widget _buildProjectSummaryCard(
@@ -895,14 +919,17 @@ class _UserDashboardPageState extends State<UserDashboardPage>
   }
 
   IconData _getTaskIcon(Map<String, dynamic> task) {
-    switch (task['state']) {
-      case '1':
+    final s = _normalizedStatusForTask(task);
+    switch (s) {
+      case 'open':
         return Icons.radio_button_unchecked;
-      case '2':
+      case 'in_progress':
         return Icons.play_arrow;
-      case '3':
+      case 'done':
         return Icons.check_circle;
-      case '4':
+      case 'hold':
+        return Icons.pause_circle_filled;
+      case 'cancelled':
         return Icons.cancel;
       default:
         return Icons.task_alt;
@@ -910,39 +937,36 @@ class _UserDashboardPageState extends State<UserDashboardPage>
   }
 
   Color _getTaskStatusColor(String? state) {
-    switch (state) {
-      case '1':
+    final s = state ?? 'open';
+    switch (s) {
       case 'open':
-      case 'draft':
         return Colors.blue;
-      case '2':
       case 'in_progress':
         return Colors.orange;
-      case '3':
       case 'done':
         return Colors.green;
-      case '4':
       case 'cancelled':
         return Colors.red;
+      case 'hold':
+        return Colors.purple;
       default:
         return Colors.grey;
     }
   }
 
   String _getTaskStatusText(String? state) {
-    switch (state) {
-      case '1':
+    final s = state ?? 'open';
+    switch (s) {
       case 'open':
         return 'Open';
-      case '2':
       case 'in_progress':
         return 'In Progress';
-      case '3':
       case 'done':
         return 'Completed';
-      case '4':
       case 'cancelled':
         return 'Cancelled';
+      case 'hold':
+        return 'On Hold';
       case 'draft':
         return 'Draft';
       default:

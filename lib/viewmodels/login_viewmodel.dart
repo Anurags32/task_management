@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:task_management/services/notification_service.dart' show NotificationService;
 import 'package:task_management/services/odoo_client.dart';
 
 class LoginViewModel extends ChangeNotifier {
@@ -57,6 +58,14 @@ class LoginViewModel extends ChangeNotifier {
           userType = 'task_creator';
         } else {
           userType = 'normal_user';
+        }
+
+        // Ensure device token is registered after successful login
+        try {
+          // Register FCM token for this logged-in user
+          await NotificationService().registerCurrentTokenWithBackend();
+        } catch (e) {
+          debugPrint('Failed to register token after login: $e');
         }
 
         return {

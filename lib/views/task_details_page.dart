@@ -2,10 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/user_dashboard_viewmodel.dart';
 
-class TaskDetailsPage extends StatelessWidget {
+class TaskDetailsPage extends StatefulWidget {
   final Map<String, dynamic> task;
 
   const TaskDetailsPage({super.key, required this.task});
+
+  @override
+  State<TaskDetailsPage> createState() => _TaskDetailsPageState();
+}
+
+class _TaskDetailsPageState extends State<TaskDetailsPage> {
+  late Map<String, dynamic> task;
+
+  @override
+  void initState() {
+    super.initState();
+    task = Map<String, dynamic>.from(widget.task);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +62,8 @@ class TaskDetailsPage extends StatelessWidget {
   }
 
   Widget _buildTaskHeaderCard() {
-    final isCompleted = _isTaskCompleted(task);
+    final status = _normalizedStatusForTask(task);
+    final isCompleted = status == 'done';
 
     return Container(
       width: double.infinity,
@@ -89,7 +103,7 @@ class TaskDetailsPage extends StatelessWidget {
                 ),
                 child: Icon(
                   _getTaskIcon(task),
-                  color: _getTaskStatusColor(task['state']),
+                  color: _getTaskStatusColor(status),
                   size: 32,
                 ),
               ),
@@ -118,19 +132,17 @@ class TaskDetailsPage extends StatelessWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: _getTaskStatusColor(
-                          task['state'],
-                        ).withOpacity(0.2),
+                        color: _getTaskStatusColor(status).withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: _getTaskStatusColor(task['state']),
+                          color: _getTaskStatusColor(status),
                           width: 1,
                         ),
                       ),
                       child: Text(
-                        _getTaskStatusText(task['state']),
+                        _getTaskStatusText(status),
                         style: TextStyle(
-                          color: _getTaskStatusColor(task['state']),
+                          color: _getTaskStatusColor(status),
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
@@ -330,7 +342,7 @@ class TaskDetailsPage extends StatelessWidget {
   }
 
   Widget _buildActionsCard(BuildContext context) {
-    final isCompleted = _isTaskCompleted(task);
+    final isCompleted = _normalizedStatusForTask(task) == 'done';
 
     return Container(
       width: double.infinity,
@@ -466,59 +478,53 @@ class TaskDetailsPage extends StatelessWidget {
   }
 
   // Helper methods
-  bool _isTaskCompleted(Map<String, dynamic> task) {
-    return task['state'] == '3' || task['state'] == 'done';
-  }
-
   IconData _getTaskIcon(Map<String, dynamic> task) {
-    switch (task['state']) {
-      case '1':
+    final s = _normalizedStatusForTask(task);
+    switch (s) {
+      case 'open':
         return Icons.radio_button_unchecked;
-      case '2':
+      case 'in_progress':
         return Icons.play_arrow;
-      case '3':
+      case 'done':
         return Icons.check_circle;
-      case '4':
+      case 'hold':
+        return Icons.pause_circle_filled;
+      case 'cancelled':
         return Icons.cancel;
       default:
         return Icons.task_alt;
     }
   }
 
-  Color _getTaskStatusColor(String? state) {
-    switch (state) {
-      case '1':
+  Color _getTaskStatusColor(String? status) {
+    switch (status) {
       case 'open':
-      case 'draft':
         return Colors.blue;
-      case '2':
       case 'in_progress':
         return Colors.orange;
-      case '3':
       case 'done':
         return Colors.green;
-      case '4':
       case 'cancelled':
         return Colors.red;
+      case 'hold':
+        return Colors.purple;
       default:
         return Colors.grey;
     }
   }
 
-  String _getTaskStatusText(String? state) {
-    switch (state) {
-      case '1':
+  String _getTaskStatusText(String? status) {
+    switch (status) {
       case 'open':
         return 'Open';
-      case '2':
       case 'in_progress':
         return 'In Progress';
-      case '3':
       case 'done':
         return 'Completed';
-      case '4':
       case 'cancelled':
         return 'Cancelled';
+      case 'hold':
+        return 'On Hold';
       case 'draft':
         return 'Draft';
       default:
@@ -593,14 +599,54 @@ class TaskDetailsPage extends StatelessWidget {
     return cleanText.trim();
   }
 
+  // Helpers to normalize status similar to dashboard
+  String _normalizeState(dynamic state) {
+    if (state == null) return 'open';
+    final s = state.toString().toLowerCase();
+    if (s == '1') return 'open';
+    if (s == '2') return 'in_progress';
+    if (s == '3') return 'done';
+    if (s == '4') return 'hold';
+    if (s.contains('progress')) return 'in_progress';
+    if (s.contains('done') || s.contains('complete')) return 'done';
+    if (s.contains('hold') || s.contains('waiting') || s.contains('blocked'))
+      return 'hold';
+    if (s.contains('cancel')) return 'cancelled';
+    if (s.contains('open') || s.contains('draft') || s.contains('todo'))
+      return 'open';
+    return 'open';
+  }
+
+  String _normalizedStatusForTask(Map<String, dynamic> task) {
+    try {
+      final stage = task['stage_id'];
+      if (stage is List && stage.length >= 2) {
+        final stageName = stage[1]?.toString().toLowerCase() ?? '';
+        if (stageName.contains('done') || stageName.contains('complete'))
+          return 'done';
+        if (stageName.contains('progress') || stageName.contains('working'))
+          return 'in_progress';
+        if (stageName.contains('hold') ||
+            stageName.contains('waiting') ||
+            stageName.contains('blocked'))
+          return 'hold';
+        if (stageName.contains('open') ||
+            stageName.contains('todo') ||
+            stageName.contains('new'))
+          return 'open';
+      }
+    } catch (_) {}
+    return _normalizeState(task['state']);
+  }
+
   bool _canStartTask(Map<String, dynamic> task) {
-    final state = task['state'];
-    return state == '1' || state == 'open' || state == 'draft';
+    final status = _normalizedStatusForTask(task);
+    return status == 'open';
   }
 
   bool _canSetPending(Map<String, dynamic> task) {
-    final state = task['state'];
-    return state == '2' || state == 'in_progress' || state == 'open';
+    final status = _normalizedStatusForTask(task);
+    return status == 'open' || status == 'in_progress';
   }
 
   void _showStartTaskDialog(BuildContext context) {
@@ -757,7 +803,10 @@ class TaskDetailsPage extends StatelessWidget {
                         backgroundColor: Colors.green,
                       ),
                     );
-                    Navigator.of(context).pop(); // Go back to dashboard
+                    // Navigate to user dashboard after completion
+                    Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/user_dashboard', (r) => false);
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(

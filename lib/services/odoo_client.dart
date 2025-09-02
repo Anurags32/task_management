@@ -191,6 +191,162 @@ class OdooClient {
     return false;
   }
 
+  /// Register device FCM token to backend (link with current user)
+  Future<Map<String, dynamic>> registerDeviceToken(String token) async {
+    try {
+      final hasSession = await _ensureSession();
+      if (!hasSession) {
+        return {'success': false, 'error': 'No session'};
+      }
+
+      // You should implement corresponding Odoo controller or model method
+      // Example: call_kw to custom model 'res.partner' or a custom model 'mobile.device'
+      final payload = {
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'model': 'res.users',
+          'method': 'set_mobile_token',
+          'args': [
+            [_currentUser?['uid']],
+            {'fcm_token': token},
+          ],
+          'kwargs': {},
+        },
+      };
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.callKwEndpoint),
+            headers: _baseHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      _storeCookies(res);
+      if (res.statusCode != 200) {
+        return {'success': false, 'error': 'HTTP ${res.statusCode}'};
+      }
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (data['error'] != null) {
+        return {'success': false, 'error': data['error'].toString()};
+      }
+      return {'success': true};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Ask backend to notify users about a new task assignment (server sends FCM)
+  Future<Map<String, dynamic>> sendTaskAssignedNotification({
+    required List<int> userIds,
+    required int taskId,
+    required String taskName,
+    String? projectName,
+    int? allocatedMinutes,
+    DateTime? deadline,
+  }) async {
+    try {
+      final hasSession = await _ensureSession();
+      if (!hasSession) return {'success': false, 'error': 'No session'};
+
+      final payload = {
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'model': 'res.users',
+          'method': 'notify_task_assigned',
+          'args': [
+            userIds,
+            {
+              'type': 'task_assigned',
+              'task_id': taskId,
+              'task_name': taskName,
+              'project_name': projectName ?? 'Project',
+              'allocated_minutes': allocatedMinutes,
+              'deadline': deadline?.toIso8601String(),
+            },
+          ],
+          'kwargs': {},
+        },
+      };
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.callKwEndpoint),
+            headers: _baseHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      _storeCookies(res);
+      if (res.statusCode != 200) {
+        return {'success': false, 'error': 'HTTP ${res.statusCode}'};
+      }
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (data['error'] != null) {
+        return {'success': false, 'error': data['error'].toString()};
+      }
+      return {'success': true};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Ask backend to notify admins/users about a task status update (server sends FCM)
+  Future<Map<String, dynamic>> sendTaskStatusNotification({
+    required List<int> userIds,
+    required int taskId,
+    required String taskName,
+    required String status,
+    int? stageId,
+  }) async {
+    try {
+      final hasSession = await _ensureSession();
+      if (!hasSession) return {'success': false, 'error': 'No session'};
+
+      final payload = {
+        'jsonrpc': '2.0',
+        'method': 'call',
+        'params': {
+          'model': 'res.users',
+          'method': 'notify_task_status',
+          'args': [
+            userIds,
+            {
+              'type': 'task_status',
+              'task_id': taskId,
+              'task_name': taskName,
+              'status': status,
+              'stage_id': stageId,
+            },
+          ],
+          'kwargs': {},
+        },
+      };
+
+      final res = await http
+          .post(
+            _uri(OdooConfig.callKwEndpoint),
+            headers: _baseHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      _storeCookies(res);
+      if (res.statusCode != 200) {
+        return {'success': false, 'error': 'HTTP ${res.statusCode}'};
+      }
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (data['error'] != null) {
+        return {'success': false, 'error': data['error'].toString()};
+      }
+      return {'success': true};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   /// Search and read records
   Future<Map<String, dynamic>> searchRead({
     required String model,

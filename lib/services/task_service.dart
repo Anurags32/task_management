@@ -198,10 +198,23 @@ class TaskService {
     // Debug: print result received
     print('TaskService.createTask <- result: ' + result.toString());
 
-    // Notifications will be handled on the assignee's device upon sync.
-    // We intentionally do NOT trigger local notifications here (admin device).
+    // If created, ask backend to send push to assigned users immediately
     if (result['success'] == true) {
-      // No-op: user device will detect new assignments and schedule notifications.
+      try {
+        final createdTaskId = result['id'] as int?;
+        if (createdTaskId != null && userIds != null && userIds.isNotEmpty) {
+          await OdooClient.instance.sendTaskAssignedNotification(
+            userIds: userIds,
+            taskId: createdTaskId,
+            taskName: name,
+            projectName: null,
+            allocatedMinutes: allocatedMinutes,
+            deadline: deadline,
+          );
+        }
+      } catch (e) {
+        print('Failed to request push for task assignment: $e');
+      }
     }
 
     return result;
@@ -233,7 +246,8 @@ class TaskService {
       values['date_deadline'] = formattedDeadline;
     }
     if (state != null) values['state'] = state;
-    if (kanban_state != null) values['kanban_state'] = kanban_state;
+    // NOTE: 'kanban_state' is not available on your server's project.task model; don't send it.
+    // if (kanban_state != null) values['kanban_state'] = kanban_state;
 
     if (values.isEmpty) {
       return {'success': false, 'error': 'No fields to update'};
@@ -250,12 +264,69 @@ class TaskService {
     // Handle notifications for task completion or cancellation
     if (result['success'] == true) {
       try {
-        if (state == '3' || kanban_state == 'done') {
-          // Task completed - cancel all notifications
+        // Cancel local device schedules when completed/cancelled
+        if (state == '3' || (state?.toLowerCase() == 'done')) {
           await TaskNotificationManager().handleTaskCompletion(taskId);
-        } else if (state == '4') {
-          // Task cancelled - cancel all notifications
+        } else if (state == '4' ||
+            (state?.toLowerCase().contains('cancel') ?? false)) {
           await TaskNotificationManager().handleTaskCancellation(taskId);
+        }
+
+        // Notify admins about status update (completed/hold/in_progress/etc.)
+        // Derive a friendly status label
+        String statusLabel = 'updated';
+        final s = state?.toLowerCase();
+        if (s == '3' || (s?.contains('done') ?? false) || s == 'done') {
+          statusLabel = 'completed';
+        } else if (s == '4' || (s?.contains('cancel') ?? false)) {
+          statusLabel = 'cancelled';
+        } else if ((s?.contains('hold') ?? false)) {
+          statusLabel = 'hold';
+        } else if ((s?.contains('progress') ?? false) ||
+            (s?.contains('in_progress') ?? false) ||
+            s == '01_in_progress') {
+          statusLabel = 'in_progress';
+        }
+
+        // Fetch task name for message
+        String taskName = 'Task';
+        try {
+          final taskInfo = await OdooClient.instance.searchRead(
+            model: 'project.task',
+            fields: ['id', 'name'],
+            domain: [
+              ['id', '=', taskId],
+            ],
+            limit: 1,
+          );
+          if (taskInfo['success'] == true) {
+            final list = taskInfo['data'] as List<dynamic>?;
+            if (list != null && list.isNotEmpty) {
+              final m = Map<String, dynamic>.from(list.first);
+              taskName = (m['name']?.toString() ?? taskName);
+            }
+          }
+        } catch (_) {}
+
+        // Get admin users to notify (default: login == 'admin')
+        final adminsResult = await getAdminUsers();
+        if (adminsResult['success'] == true) {
+          final admins =
+              (adminsResult['data'] as List<dynamic>?)
+                  ?.map((e) => Map<String, dynamic>.from(e))
+                  .toList() ??
+              [];
+          final adminIds = admins.map((u) => u['id']).whereType<int>().toList();
+
+          if (adminIds.isNotEmpty) {
+            await OdooClient.instance.sendTaskStatusNotification(
+              userIds: adminIds,
+              taskId: taskId,
+              taskName: taskName,
+              status: statusLabel,
+              stageId: stageId,
+            );
+          }
         }
       } catch (e) {
         print('Error handling task update notifications: $e');
@@ -264,6 +335,24 @@ class TaskService {
 
     print('Task update result: $result');
     return result;
+  }
+
+  /// Get admin users (basic: login == admin)
+  Future<Map<String, dynamic>> getAdminUsers() async {
+    try {
+      final res = await OdooClient.instance.searchRead(
+        model: 'res.users',
+        fields: ['id', 'name', 'login', 'email'],
+        domain: [
+          ['active', '=', true],
+          ['login', '=', 'admin'],
+        ],
+        limit: 10,
+      );
+      return res;
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
   }
 
   /// Update project
@@ -631,7 +720,8 @@ class TaskService {
 
       final result = await OdooClient.instance.searchRead(
         model: 'project.task.type',
-        fields: ['id', 'name', 'sequence', 'is_closed', 'fold'],
+        // Some servers don't expose 'is_closed' or 'fold'
+        fields: ['id', 'name', 'sequence'],
         domain: [],
         limit: 100,
       );

@@ -8,12 +8,116 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import '../firebase_options.dart';
+import 'odoo_client.dart';
 
 // Top-level function for background message handling
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Initialize Firebase for background isolate
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  print('Handling a background message: ${message.messageId}');
+  try {
+    // Initialize local notifications in background isolate
+    final plugin = FlutterLocalNotificationsPlugin();
+    const initSettings = InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    );
+    await plugin.initialize(initSettings);
+
+    // Create channels (id/name/description must match foreground for grouping)
+    const assignmentChannel = AndroidNotificationChannel(
+      'task_assignment',
+      'Task Assignment',
+      description: 'Notifications for new task assignments',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+    const reminderChannel = AndroidNotificationChannel(
+      'task_reminder',
+      'Task Reminders',
+      description: 'Notifications for task time reminders',
+      importance: Importance.defaultImportance,
+      playSound: true,
+      enableVibration: true,
+    );
+    const deadlineChannel = AndroidNotificationChannel(
+      'task_deadline',
+      'Task Deadlines',
+      description: 'Notifications for task deadlines',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    final androidImpl = plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    await androidImpl?.createNotificationChannel(assignmentChannel);
+    await androidImpl?.createNotificationChannel(reminderChannel);
+    await androidImpl?.createNotificationChannel(deadlineChannel);
+
+    // Determine channel and content
+    final data = message.data;
+    final type = (data['type'] ?? '').toString();
+    String channelId;
+    String channelName;
+    String channelDescription;
+    switch (type) {
+      case 'task_assigned':
+        channelId = 'task_assignment';
+        channelName = 'Task Assignment';
+        channelDescription = 'Notifications for new task assignments';
+        break;
+      case 'task_reminder':
+        channelId = 'task_reminder';
+        channelName = 'Task Reminders';
+        channelDescription = 'Notifications for task time reminders';
+        break;
+      case 'task_deadline':
+        channelId = 'task_deadline';
+        channelName = 'Task Deadlines';
+        channelDescription = 'Notifications for task deadlines';
+        break;
+      default:
+        channelId = 'task_assignment';
+        channelName = 'Task Assignment';
+        channelDescription = 'Notifications for new task assignments';
+    }
+
+    final notification = message.notification;
+    final title =
+        notification?.title ??
+        (type == 'task_assigned' ? 'New Task Assigned' : 'Task Update');
+    final body =
+        notification?.body ??
+        (data['task_name']?.toString() ?? 'Open the app to view details');
+
+    await plugin.show(
+      // Unique id for each notification
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          channelName,
+          channelDescription: channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+    );
+  } catch (e) {
+    print('Background handler error: $e');
+  }
 }
 
 class NotificationService {
@@ -24,6 +128,16 @@ class NotificationService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
+
+  // Simple event stream to notify app about push-triggered events
+  final StreamController<Map<String, dynamic>> _eventController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get events => _eventController.stream;
+  void _emitEvent(Map<String, dynamic> event) {
+    try {
+      _eventController.add(event);
+    } catch (_) {}
+  }
 
   StreamSubscription<RemoteMessage>? _messageSubscription;
   StreamSubscription<RemoteMessage>? _backgroundMessageSubscription;
@@ -55,6 +169,11 @@ class NotificationService {
 
       // Get FCM token
       await _getFCMToken();
+
+      // Listen for token refreshes and re-register
+      _firebaseMessaging.onTokenRefresh.listen((token) async {
+        await _saveFCMToken(token);
+      });
 
       print('NotificationService initialized successfully');
     } catch (e) {
@@ -177,7 +296,6 @@ class NotificationService {
       final token = await _firebaseMessaging.getToken();
       if (token != null) {
         print('FCM Token: $token');
-        // TODO: Send this token to your backend to associate with user
         await _saveFCMToken(token);
       }
     } catch (e) {
@@ -185,17 +303,37 @@ class NotificationService {
     }
   }
 
-  /// Save FCM token locally (you can also send to your backend)
+  /// Public: call after successful login to ensure token is linked to user session
+  Future<void> registerCurrentTokenWithBackend() async {
+    try {
+      final token = await _firebaseMessaging.getToken();
+      if (token != null) {
+        await _saveFCMToken(token);
+      }
+    } catch (e) {
+      print('registerCurrentTokenWithBackend error: $e');
+    }
+  }
+
+  /// Save FCM token locally and send to backend (associate with current user)
   Future<void> _saveFCMToken(String token) async {
-    // TODO: Implement token storage and send to backend
-    print('FCM Token saved: $token');
+    try {
+      print('FCM Token saved: $token');
+      // Send token to Odoo backend to link with current user
+      final res = await OdooClient.instance.registerDeviceToken(token);
+      if (res['success'] != true) {
+        print('Failed to register FCM token on backend: ${res['error']}');
+      }
+    } catch (e) {
+      print('Error registering FCM token on backend: $e');
+    }
   }
 
   /// Handle foreground messages
   void _handleForegroundMessage(RemoteMessage message) async {
     print('Received foreground message: ${message.messageId}');
 
-    // If this is a task assignment push, only show it if it's meant for this user
+    // If this is a task assignment push, schedule local workflow on user device
     final data = message.data;
     final type = data['type'];
     if (type == 'task_assigned') {
@@ -207,8 +345,124 @@ class NotificationService {
         return;
       }
       await prefs.setBool(key, true);
+
+      // Extract needed fields from payload
+      final taskId = int.tryParse(data['task_id']?.toString() ?? '');
+      final taskName = data['task_name']?.toString() ?? 'Task';
+      final projectName = data['project_name']?.toString() ?? 'Project';
+
+      // Notify app to refresh data (e.g., UserDashboardViewModel can listen)
+      _emitEvent({'type': 'task_assigned', 'task_id': taskId});
+
+      // Immediate "Task Assigned" local notification
+      await showTaskAssignmentNotification(
+        taskId: taskId ?? (message.hashCode),
+        taskName: taskName,
+        projectName: projectName,
+      );
+
+      // Schedule reminders from payload
+      // Option A: allocated window
+      final allocated = int.tryParse(
+        data['allocated_minutes']?.toString() ?? '',
+      );
+      // Option B: absolute deadline ISO8601
+      final deadlineStr = data['deadline']?.toString();
+      DateTime? deadline;
+      if (deadlineStr != null && deadlineStr.isNotEmpty) {
+        try {
+          deadline = DateTime.parse(deadlineStr);
+        } catch (_) {}
+      }
+
+      if (allocated != null && allocated > 0) {
+        final endTime = DateTime.now().add(Duration(minutes: allocated));
+        for (final m in [30, 45, 55]) {
+          if (m < allocated) {
+            final minutesBeforeEnd = allocated - m;
+            await scheduleTaskReminder(
+              taskId: taskId ?? message.hashCode,
+              taskName: taskName,
+              deadline: endTime,
+              reminderMinutes: minutesBeforeEnd,
+            );
+          }
+        }
+        await scheduleTaskDeadline(
+          taskId: taskId ?? message.hashCode,
+          taskName: taskName,
+          deadline: endTime,
+        );
+      } else if (deadline != null) {
+        for (final m in [30, 45, 55]) {
+          await scheduleTaskReminder(
+            taskId: taskId ?? message.hashCode,
+            taskName: taskName,
+            deadline: deadline,
+            reminderMinutes: m,
+          );
+        }
+        await scheduleTaskDeadline(
+          taskId: taskId ?? message.hashCode,
+          taskName: taskName,
+          deadline: deadline,
+        );
+      }
+
+      return; // we've handled locally
+    } else if (type == 'task_status') {
+      // Status update for admins (or watchers)
+      final taskId = int.tryParse(data['task_id']?.toString() ?? '');
+      final taskName = data['task_name']?.toString() ?? 'Task';
+      final status = (data['status']?.toString() ?? 'updated').toLowerCase();
+
+      String title = 'Task Status Updated';
+      String body = '"$taskName" is $status';
+      if (status == 'completed') {
+        title = 'Task Completed';
+        body = '"$taskName" has been completed';
+      } else if (status == 'hold') {
+        title = 'Task On Hold';
+        body = '"$taskName" is put on hold';
+      } else if (status == 'in_progress') {
+        title = 'Task In Progress';
+        body = '"$taskName" is now in progress';
+      }
+
+      // Emit event so dashboards can refresh
+      _emitEvent({'type': 'task_status', 'task_id': taskId, 'status': status});
+
+      _localNotifications.show(
+        (taskId ?? message.hashCode) + 50000,
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _taskAssignmentChannel,
+            'Task Assignment',
+            channelDescription: 'Notifications for new task assignments',
+            icon: '@mipmap/ic_launcher',
+            color: Colors.blue,
+            priority: Priority.high,
+            importance: Importance.high,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        payload: json.encode({
+          'type': 'task_status',
+          'task_id': (taskId ?? message.hashCode).toString(),
+          'task_name': taskName,
+          'status': status,
+        }),
+      );
+      return;
     }
 
+    // Default: show the notification
     _showLocalNotification(message);
   }
 
@@ -284,6 +538,11 @@ class NotificationService {
   /// Handle message opened from app
   void _handleMessageOpenedApp(RemoteMessage message) {
     print('App opened from notification: ${message.messageId}');
+    // Emit event so viewmodels can refresh data immediately
+    final type = message.data['type'];
+    if (type == 'task_assigned') {
+      _emitEvent({'type': 'task_assigned'});
+    }
     _handleNotificationTap(message.data);
   }
 
