@@ -420,50 +420,100 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getTaskStatusColor(
-                        task['state'],
-                      ).withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _getTaskStatusText(task['state']),
-                      style: TextStyle(
-                        color: _getTaskStatusColor(task['state']),
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  if (task['stage_id'] != null) ...[
-                    const SizedBox(height: 4),
-                    Container(
+                  (() {
+                    final statusText = _getTaskStatusText(task['state']);
+                    if (statusText.isEmpty) return const SizedBox.shrink();
+                    return Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 1,
+                        horizontal: 10,
+                        vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.grey.shade300,
-                          width: 0.5,
-                        ),
+                        color: _getTaskStatusColor(task['state']),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        _getStageName(task['stage_id']),
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(width: 2),
+                          Icon(
+                            _getTaskStatusIcon(task['state']),
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            statusText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                        ],
                       ),
-                    ),
+                    );
+                  })(),
+                  if (task['stage_id'] != null) ...[
+                    const SizedBox(height: 6),
+                    (() {
+                      final stage = _getStageName(task['stage_id']);
+                      if (stage.isEmpty) return const SizedBox.shrink();
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.purple.shade400,
+                              Colors.purple.shade200,
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.purple.withOpacity(0.3),
+                              blurRadius: 5,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.layers,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              stage,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    })(),
                   ],
                 ],
               ),
@@ -481,7 +531,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
               ),
             ),
           ],
-          if (assignedUsers.isNotEmpty) ...[
+          if (assignedUsers
+              .where((u) => _stripHtmlTags(u['name']).isNotEmpty)
+              .isNotEmpty) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -498,10 +550,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                       children: [
                         TextSpan(
                           text: assignedUsers
-                              .map(
-                                (user) =>
-                                    _stripHtmlTags(user['name'] ?? 'Unknown'),
-                              )
+                              .map((user) => _stripHtmlTags(user['name']))
+                              .where((name) => name.isNotEmpty)
                               .join(', '),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
@@ -666,7 +716,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       case 'draft':
         return 'Draft';
       default:
-        return 'Unknown';
+        return '';
     }
   }
 
@@ -717,11 +767,31 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     if (stageId == null) return '';
 
     if (stageId is List && stageId.length > 1) {
-      return stageId[1]?.toString() ?? 'Unknown Stage';
+      return stageId[1]?.toString() ?? '';
     } else if (stageId is int) {
       return 'Stage $stageId';
     } else {
       return stageId.toString();
+    }
+  }
+
+  IconData _getTaskStatusIcon(String? state) {
+    switch (state) {
+      case '1':
+      case 'open':
+      case 'draft':
+        return Icons.fiber_new;
+      case '2':
+      case 'in_progress':
+        return Icons.hourglass_bottom;
+      case '3':
+      case 'done':
+        return Icons.check_circle;
+      case '4':
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.help_outline;
     }
   }
 

@@ -1190,6 +1190,50 @@ class UserDashboardViewModel extends ChangeNotifier {
           notifyListeners();
         }
 
+        // Notify admins explicitly about in_progress status
+        try {
+          String taskName = 'Task';
+          try {
+            final taskInfo = await OdooClient.instance.searchRead(
+              model: 'project.task',
+              fields: ['id', 'name'],
+              domain: [
+                ['id', '=', taskId],
+              ],
+              limit: 1,
+            );
+            if (taskInfo['success'] == true) {
+              final list = taskInfo['data'] as List<dynamic>?;
+              if (list != null && list.isNotEmpty) {
+                final m = Map<String, dynamic>.from(list.first);
+                taskName = (m['name']?.toString() ?? taskName);
+              }
+            }
+          } catch (_) {}
+
+          final adminsResult = await TaskService().getAdminUsers();
+          if (adminsResult['success'] == true) {
+            final admins =
+                (adminsResult['data'] as List<dynamic>?)
+                    ?.map((e) => Map<String, dynamic>.from(e))
+                    .toList() ??
+                [];
+            final adminIds = admins
+                .map((u) => u['id'])
+                .whereType<int>()
+                .toList();
+            if (adminIds.isNotEmpty) {
+              await OdooClient.instance.sendTaskStatusNotification(
+                userIds: adminIds,
+                taskId: taskId,
+                taskName: taskName,
+                status: 'in_progress',
+                stageId: inProgressStageId,
+              );
+            }
+          }
+        } catch (_) {}
+
         // Refresh the task list
         await Future.delayed(const Duration(milliseconds: 500));
         await loadUserData();
@@ -1295,6 +1339,50 @@ class UserDashboardViewModel extends ChangeNotifier {
           print('Successfully updated local task state for task ID: $taskId');
           notifyListeners();
         }
+
+        // Notify admins explicitly about hold/open status
+        try {
+          String taskName = 'Task';
+          try {
+            final taskInfo = await OdooClient.instance.searchRead(
+              model: 'project.task',
+              fields: ['id', 'name'],
+              domain: [
+                ['id', '=', taskId],
+              ],
+              limit: 1,
+            );
+            if (taskInfo['success'] == true) {
+              final list = taskInfo['data'] as List<dynamic>?;
+              if (list != null && list.isNotEmpty) {
+                final m = Map<String, dynamic>.from(list.first);
+                taskName = (m['name']?.toString() ?? taskName);
+              }
+            }
+          } catch (_) {}
+
+          final adminsResult = await TaskService().getAdminUsers();
+          if (adminsResult['success'] == true) {
+            final admins =
+                (adminsResult['data'] as List<dynamic>?)
+                    ?.map((e) => Map<String, dynamic>.from(e))
+                    .toList() ??
+                [];
+            final adminIds = admins
+                .map((u) => u['id'])
+                .whereType<int>()
+                .toList();
+            if (adminIds.isNotEmpty) {
+              await OdooClient.instance.sendTaskStatusNotification(
+                userIds: adminIds,
+                taskId: taskId,
+                taskName: taskName,
+                status: pendingStageId != null ? 'hold' : 'open',
+                stageId: pendingStageId,
+              );
+            }
+          }
+        } catch (_) {}
 
         // Refresh the task list
         await Future.delayed(const Duration(milliseconds: 500));

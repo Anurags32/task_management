@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:task_management/viewmodels/user_dashboard_viewmodel.dart'
-    show UserDashboardViewModel;
 import '../viewmodels/add_task_viewmodel.dart';
 
 class AddTaskPage extends StatefulWidget {
@@ -79,20 +77,149 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   _label("Assign To"),
                                   const SizedBox(height: 8),
                                   vm.users.isNotEmpty
-                                      ? DropdownButtonFormField<int>(
-                                          value: vm.selectedAssigneeId,
-                                          decoration: _dropdownDecoration(),
-                                          hint: const Text("Select User"),
-                                          items: vm.users.map((user) {
-                                            return DropdownMenuItem<int>(
-                                              value: user['id'] as int,
-                                              child: Text(
-                                                user['name'] ?? 'Unknown User',
-                                              ),
-                                            );
-                                          }).toList(),
-                                          onChanged: (value) =>
-                                              vm.setSelectedAssignee(value),
+                                      ? Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: vm.selectedAssigneeIds.map((
+                                                id,
+                                              ) {
+                                                final user = vm.users
+                                                    .firstWhere(
+                                                      (u) => u['id'] == id,
+                                                      orElse: () =>
+                                                          <String, dynamic>{},
+                                                    );
+                                                final name =
+                                                    (user['name'] ?? 'User $id')
+                                                        .toString();
+                                                return Chip(
+                                                  label: Text(
+                                                    name,
+                                                    style: const TextStyle(
+                                                      color: Colors.black87,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  backgroundColor:
+                                                      Colors.grey.shade200,
+                                                  deleteIconColor:
+                                                      Colors.black54,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  onDeleted: () {
+                                                    vm.toggleAssignee(id);
+                                                  },
+                                                );
+                                              }).toList(),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            OutlinedButton.icon(
+                                              icon: const Icon(Icons.group_add),
+                                              label: const Text('Select Users'),
+                                              onPressed: () async {
+                                                final current =
+                                                    vm.selectedAssigneeIds;
+                                                final List<int>?
+                                                picked = await showDialog(
+                                                  context: context,
+                                                  builder: (context) {
+                                                    final tempSelected = current
+                                                        .toSet();
+                                                    return AlertDialog(
+                                                      title: const Text(
+                                                        'Select Assignees',
+                                                      ),
+                                                      content: SizedBox(
+                                                        width: double.maxFinite,
+                                                        child: ListView.builder(
+                                                          shrinkWrap: true,
+                                                          itemCount:
+                                                              vm.users.length,
+                                                          itemBuilder: (context, index) {
+                                                            final user =
+                                                                vm.users[index];
+                                                            final uid =
+                                                                user['id']
+                                                                    as int;
+                                                            final uname =
+                                                                (user['name'] ??
+                                                                        'Unknown User')
+                                                                    .toString();
+                                                            final checked =
+                                                                tempSelected
+                                                                    .contains(
+                                                                      uid,
+                                                                    );
+                                                            return CheckboxListTile(
+                                                              value: checked,
+                                                              title: Text(
+                                                                uname,
+                                                              ),
+                                                              onChanged: (val) {
+                                                                if (val ==
+                                                                    true) {
+                                                                  tempSelected
+                                                                      .add(uid);
+                                                                } else {
+                                                                  tempSelected
+                                                                      .remove(
+                                                                        uid,
+                                                                      );
+                                                                }
+                                                                // Rebuild dialog
+                                                                (context
+                                                                        as Element)
+                                                                    .markNeedsBuild();
+                                                              },
+                                                            );
+                                                          },
+                                                        ),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () {
+                                                            Navigator.pop(
+                                                              context,
+                                                              null,
+                                                            );
+                                                          },
+                                                          child: const Text(
+                                                            'Cancel',
+                                                          ),
+                                                        ),
+                                                        ElevatedButton(
+                                                          onPressed: () {
+                                                            Navigator.pop(
+                                                              context,
+                                                              tempSelected
+                                                                  .toList(),
+                                                            );
+                                                          },
+                                                          child: const Text(
+                                                            'Done',
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    );
+                                                  },
+                                                );
+                                                if (picked != null) {
+                                                  vm.setSelectedAssignees(
+                                                    picked,
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                          ],
                                         )
                                       : const Text("Loading users..."),
                                 ],
@@ -242,54 +369,54 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             const SizedBox(height: 16),
 
                             // Allotted Time
-                            _buildCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _label("Allotted Time"),
-                                  const SizedBox(height: 8),
-                                  DropdownButtonFormField<String>(
-                                    value: vm.allottedTime,
-                                    decoration: _dropdownDecoration(),
-                                    hint: const Text("Select Hours"),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: "1",
-                                        child: Text("1 Hr"),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: "2",
-                                        child: Text("2 Hrs"),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: "4",
-                                        child: Text("4 Hrs"),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: "8",
-                                        child: Text("8 Hrs"),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: "9",
-                                        child: Text("9 Hrs"),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: "16",
-                                        child: Text("16 Hrs"),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: "24",
-                                        child: Text("24 Hrs"),
-                                      ),
-                                    ],
-                                    onChanged: (value) {
-                                      vm.setAllottedTime(value);
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
+                            // _buildCard(
+                            //   child: Column(
+                            //     crossAxisAlignment: CrossAxisAlignment.start,
+                            //     children: [
+                            //       _label("Allotted Time"),
+                            //       const SizedBox(height: 8),
+                            //       DropdownButtonFormField<String>(
+                            //         value: vm.allottedTime,
+                            //         decoration: _dropdownDecoration(),
+                            //         hint: const Text("Select Hours"),
+                            //         items: const [
+                            //           DropdownMenuItem(
+                            //             value: "1",
+                            //             child: Text("1 Hr"),
+                            //           ),
+                            //           DropdownMenuItem(
+                            //             value: "2",
+                            //             child: Text("2 Hrs"),
+                            //           ),
+                            //           DropdownMenuItem(
+                            //             value: "4",
+                            //             child: Text("4 Hrs"),
+                            //           ),
+                            //           DropdownMenuItem(
+                            //             value: "8",
+                            //             child: Text("8 Hrs"),
+                            //           ),
+                            //           DropdownMenuItem(
+                            //             value: "9",
+                            //             child: Text("9 Hrs"),
+                            //           ),
+                            //           DropdownMenuItem(
+                            //             value: "16",
+                            //             child: Text("16 Hrs"),
+                            //           ),
+                            //           DropdownMenuItem(
+                            //             value: "24",
+                            //             child: Text("24 Hrs"),
+                            //           ),
+                            //         ],
+                            //         onChanged: (value) {
+                            //           vm.setAllottedTime(value);
+                            //         },
+                            //       ),
+                            //     ],
+                            //   ),
+                            // ),
+                            // const SizedBox(height: 16),
 
                             // Priority
                             _buildCard(

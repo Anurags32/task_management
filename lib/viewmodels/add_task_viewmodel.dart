@@ -12,7 +12,7 @@ class AddTaskViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> _users = [];
   List<Map<String, dynamic>> _stages = [];
   int? _selectedProjectId;
-  int? _selectedAssigneeId;
+  List<int> _selectedAssigneeIds = [];
   String _selectedPriority = '0';
   DateTime? _deadline;
   DateTime? _startDate;
@@ -27,7 +27,7 @@ class AddTaskViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> get users => List.unmodifiable(_users);
   List<Map<String, dynamic>> get stages => List.unmodifiable(_stages);
   int? get selectedProjectId => _selectedProjectId;
-  int? get selectedAssigneeId => _selectedAssigneeId;
+  List<int> get selectedAssigneeIds => List.unmodifiable(_selectedAssigneeIds);
   String get selectedPriority => _selectedPriority;
   DateTime? get deadline => _deadline;
   DateTime? get startDate => _startDate;
@@ -101,9 +101,25 @@ class AddTaskViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Set selected assignee
-  void setSelectedAssignee(int? assigneeId) {
-    _selectedAssigneeId = assigneeId;
+  /// Replace selected assignees with provided list
+  void setSelectedAssignees(List<int> assigneeIds) {
+    _selectedAssigneeIds = List<int>.from(assigneeIds);
+    notifyListeners();
+  }
+
+  /// Toggle an assignee in selection
+  void toggleAssignee(int assigneeId) {
+    if (_selectedAssigneeIds.contains(assigneeId)) {
+      _selectedAssigneeIds.remove(assigneeId);
+    } else {
+      _selectedAssigneeIds.add(assigneeId);
+    }
+    notifyListeners();
+  }
+
+  /// Clear all selected assignees
+  void clearAssignees() {
+    _selectedAssigneeIds.clear();
     notifyListeners();
   }
 
@@ -210,7 +226,7 @@ class AddTaskViewModel extends ChangeNotifier {
         name: title,
         description: finalDescription,
         projectId: _selectedProjectId,
-        userIds: _selectedAssigneeId != null ? [_selectedAssigneeId!] : null,
+        userIds: _selectedAssigneeIds.isNotEmpty ? _selectedAssigneeIds : null,
         priority: _selectedPriority,
         deadline: getDeadlineWithTime(),
         dateStart: getStartDateWithTime(),
