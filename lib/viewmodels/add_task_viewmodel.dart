@@ -193,14 +193,28 @@ class AddTaskViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final allocatedMinutes = _allottedTime != null
+          ? int.tryParse(_allottedTime!)
+          : null;
+
+      // If allocated time provided, embed it in description so user app can schedule
+      String finalDescription = description.isEmpty
+          ? 'No description'
+          : description;
+      if (allocatedMinutes != null && allocatedMinutes > 0) {
+        finalDescription =
+            '$finalDescription\nAllocated: ${allocatedMinutes.toString()}';
+      }
+
       final result = await TaskService().createTask(
         name: title,
-        description: description.isEmpty ? 'No description' : description,
+        description: finalDescription,
         projectId: _selectedProjectId,
         userIds: _selectedAssigneeId != null ? [_selectedAssigneeId!] : null,
         priority: _selectedPriority,
         deadline: getDeadlineWithTime(),
         dateStart: getStartDateWithTime(),
+        allocatedMinutes: allocatedMinutes,
       );
 
       if (result['success'] == true) {

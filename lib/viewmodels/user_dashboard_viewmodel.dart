@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/task_service.dart';
 import '../services/odoo_client.dart';
+import '../services/notification_service.dart';
 
 class UserDashboardViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> _tasks = [];
@@ -93,6 +96,156 @@ class UserDashboardViewModel extends ChangeNotifier {
     }
   }
 
+  // Detect new assignments and schedule notifications locally on user device
+  Future<void> _processNewAssignments(int userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seenKey =
+          'seen_tasks_user_'
+          '${userId.toString()}';
+      final seenIds = prefs.getStringList(seenKey) ?? <String>[];
+      final Set<String> seen = seenIds.toSet();
+
+      // Build a map of current tasks by ID
+      final Map<int, Map<String, dynamic>> taskById = {
+        for (final t in _tasks)
+          if (t['id'] is int) t['id'] as int: t,
+      };
+
+      // Find newly assigned tasks (present now but not in seen)
+      final List<Map<String, dynamic>> newlyAssigned = [];
+      for (final entry in taskById.entries) {
+        final idStr = entry.key.toString();
+        if (!seen.contains(idStr)) {
+          newlyAssigned.add(entry.value);
+        }
+      }
+
+      // Update seen with current IDs
+      await prefs.setStringList(
+        seenKey,
+        taskById.keys.map((e) => e.toString()).toList(),
+      );
+
+      if (newlyAssigned.isEmpty) return;
+
+      final notificationService = NotificationService();
+
+      for (final task in newlyAssigned) {
+        final int taskId = task['id'] as int;
+        final String taskName = (task['name']?.toString() ?? 'Task');
+
+        // Show immediate "Task Assigned" notification
+        await notificationService.showTaskAssignmentNotification(
+          taskId: taskId,
+          taskName: taskName,
+          projectName: _projectNameForTask(task),
+        );
+
+        // Schedule reminders and final deadline
+        await _scheduleRemindersForTask(notificationService, task);
+      }
+    } catch (e) {
+      print('UserDashboardViewModel._processNewAssignments error: $e');
+    }
+  }
+
+  String _projectNameForTask(Map<String, dynamic> task) {
+    try {
+      // project_id can be [id, name]
+      final p = task['project_id'];
+      if (p is List && p.length >= 2) {
+        return p[1]?.toString() ?? 'Project';
+      }
+    } catch (_) {}
+    return 'Project';
+  }
+
+  Future<void> _scheduleRemindersForTask(
+    NotificationService notificationService,
+    Map<String, dynamic> task,
+  ) async {
+    try {
+      final int taskId = task['id'] as int;
+      final String taskName = (task['name']?.toString() ?? 'Task');
+
+      // Prefer allocated window (if encoded in description like "Allocated: <minutes>")
+      int? allocatedMinutes;
+      DateTime base = DateTime.now();
+
+      // Try to parse allocated time from description pattern e.g., "Allocated: 60"
+      final desc = task['description']?.toString() ?? '';
+      final match = RegExp(r'Allocated\s*:\s*(\d+)').firstMatch(desc);
+      if (match != null) {
+        allocatedMinutes = int.tryParse(match.group(1)!);
+      }
+
+      // Try date_deadline from server
+      DateTime? deadline;
+      final dl = task['date_deadline'];
+      if (dl is String && dl.isNotEmpty) {
+        try {
+          deadline = DateTime.parse(dl);
+        } catch (_) {}
+      }
+
+      if (allocatedMinutes != null && allocatedMinutes > 0) {
+        final endTime = base.add(Duration(minutes: allocatedMinutes));
+
+        // Schedule reminders 30,45,55 minutes into the window if fit
+        final points = [
+          30,
+          45,
+          55,
+        ].where((m) => m < allocatedMinutes!).toList();
+        for (final m in points) {
+          final minutesBeforeEnd = allocatedMinutes - m;
+          await notificationService.scheduleTaskReminder(
+            taskId: taskId,
+            taskName: taskName,
+            deadline: endTime,
+            reminderMinutes: minutesBeforeEnd,
+          );
+        }
+        await notificationService.scheduleTaskDeadline(
+          taskId: taskId,
+          taskName: taskName,
+          deadline: endTime,
+        );
+        return;
+      }
+
+      // Fallback to deadline based reminders if available
+      if (deadline != null) {
+        await notificationService.scheduleTaskReminder(
+          taskId: taskId,
+          taskName: taskName,
+          deadline: deadline,
+          reminderMinutes: 30,
+        );
+        await notificationService.scheduleTaskReminder(
+          taskId: taskId,
+          taskName: taskName,
+          deadline: deadline,
+          reminderMinutes: 45,
+        );
+        await notificationService.scheduleTaskReminder(
+          taskId: taskId,
+          taskName: taskName,
+          deadline: deadline,
+          reminderMinutes: 55,
+        );
+        await notificationService.scheduleTaskDeadline(
+          taskId: taskId,
+          taskName: taskName,
+          deadline: deadline,
+        );
+      }
+    } catch (e) {
+      print('UserDashboardViewModel._scheduleRemindersForTask error: $e');
+    }
+  }
+
   /// Load user-specific data
   Future<void> loadUserData() async {
     _isLoading = true;
@@ -152,11 +305,12 @@ class UserDashboardViewModel extends ChangeNotifier {
         }
       }
 
-      // Log available stages for debugging
+      // Trigger user-side notifications for new assignments
+      await _processNewAssignments(userId);
+
+      // Optional: logs
       await logAvailableStages();
       await checkAvailableModels();
-
-      // Log task states for debugging
       await logTaskStates();
     } catch (e) {
       _errorMessage = 'Failed to load data: ${e.toString()}';
@@ -194,6 +348,19 @@ class UserDashboardViewModel extends ChangeNotifier {
         _tasks[idx]['state'] = oldState;
         _errorMessage = result['error']?.toString();
         notifyListeners();
+      } else {
+        // Handle notifications for task completion
+        if (statusKey == 'done') {
+          try {
+            // Cancel any scheduled notifications for this task on user device
+            await NotificationService().cancelTaskNotifications(taskId);
+            print(
+              'Cancelled scheduled notifications for completed task $taskId',
+            );
+          } catch (e) {
+            print('Error handling task completion notifications: $e');
+          }
+        }
       }
       return success;
     } catch (e) {

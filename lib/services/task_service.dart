@@ -1,4 +1,5 @@
 import 'package:task_management/services/odoo_client.dart';
+import 'package:task_management/services/task_notification_manager.dart';
 
 class TaskService {
   static final TaskService _instance = TaskService._internal();
@@ -163,6 +164,7 @@ class TaskService {
     String? priority,
     DateTime? deadline,
     DateTime? dateStart,
+    int? allocatedMinutes, // NEW: allocated time in minutes
   }) async {
     final values = <String, dynamic>{'name': name, 'description': description};
 
@@ -179,16 +181,30 @@ class TaskService {
       values['priority'] = priority;
     }
     if (deadline != null) {
-      values['date_deadline'] = deadline.toIso8601String();
-    }
-    if (dateStart != null) {
-      values['date_start'] = dateStart.toIso8601String();
+      // Format as 'YYYY-MM-DD HH:MM:SS' (Odoo expected format)
+      final formattedDeadline =
+          '${deadline.year.toString().padLeft(4, '0')}-${deadline.month.toString().padLeft(2, '0')}-${deadline.day.toString().padLeft(2, '0')} ${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')}:${deadline.second.toString().padLeft(2, '0')}';
+      values['date_deadline'] = formattedDeadline;
     }
 
-    return await OdooClient.instance.create(
+    // Debug: print values being sent
+    print('TaskService.createTask -> values: ' + values.toString());
+
+    final result = await OdooClient.instance.create(
       model: 'project.task',
       values: values,
     );
+
+    // Debug: print result received
+    print('TaskService.createTask <- result: ' + result.toString());
+
+    // Notifications will be handled on the assignee's device upon sync.
+    // We intentionally do NOT trigger local notifications here (admin device).
+    if (result['success'] == true) {
+      // No-op: user device will detect new assignments and schedule notifications.
+    }
+
+    return result;
   }
 
   /// Update task
@@ -211,7 +227,11 @@ class TaskService {
     if (userIds != null) values['user_ids'] = userIds;
     if (stageId != null) values['stage_id'] = stageId;
     if (priority != null) values['priority'] = priority;
-    if (deadline != null) values['date_deadline'] = deadline.toIso8601String();
+    if (deadline != null) {
+      final formattedDeadline =
+          '${deadline.year.toString().padLeft(4, '0')}-${deadline.month.toString().padLeft(2, '0')}-${deadline.day.toString().padLeft(2, '0')} ${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')}:${deadline.second.toString().padLeft(2, '0')}';
+      values['date_deadline'] = formattedDeadline;
+    }
     if (state != null) values['state'] = state;
     if (kanban_state != null) values['kanban_state'] = kanban_state;
 
@@ -226,6 +246,21 @@ class TaskService {
       recordId: taskId,
       values: values,
     );
+
+    // Handle notifications for task completion or cancellation
+    if (result['success'] == true) {
+      try {
+        if (state == '3' || kanban_state == 'done') {
+          // Task completed - cancel all notifications
+          await TaskNotificationManager().handleTaskCompletion(taskId);
+        } else if (state == '4') {
+          // Task cancelled - cancel all notifications
+          await TaskNotificationManager().handleTaskCancellation(taskId);
+        }
+      } catch (e) {
+        print('Error handling task update notifications: $e');
+      }
+    }
 
     print('Task update result: $result');
     return result;

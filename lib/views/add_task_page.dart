@@ -327,9 +327,23 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               text: "Create Task",
                               isLoading: vm.isSubmitting,
                               onTap: () async {
-                                final success = await vm.submit();
-                                if (success && context.mounted) {
-                                  Navigator.pop(context);
+                                try {
+                                  final success = await vm.submit();
+                                  if (success) {
+                                    // Log success
+                                    print('Create Task: success');
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                    }
+                                  } else {
+                                    // Log error from ViewModel if available
+                                    print(
+                                      'Create Task: failed -> ${vm.errorMessage ?? 'Unknown error'}',
+                                    );
+                                  }
+                                } catch (e) {
+                                  // Log unexpected exceptions
+                                  print('Create Task: exception -> $e');
                                 }
                               },
                             ),

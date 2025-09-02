@@ -9,13 +9,30 @@ class UserDashboardPage extends StatefulWidget {
   State<UserDashboardPage> createState() => _UserDashboardPageState();
 }
 
-class _UserDashboardPageState extends State<UserDashboardPage> {
+class _UserDashboardPageState extends State<UserDashboardPage>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<UserDashboardViewModel>().loadUserData();
+      final vm = context.read<UserDashboardViewModel>();
+      vm.loadUserData();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final vm = context.read<UserDashboardViewModel>();
+    if (state == AppLifecycleState.resumed) {
+      vm.loadUserData();
+    }
   }
 
   @override

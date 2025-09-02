@@ -1,5 +1,7 @@
+import 'package:firebase_core/firebase_core.dart' show Firebase;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:task_management/firebase_options.dart' show DefaultFirebaseOptions;
 import 'theme.dart';
 
 import 'viewmodels/landing_viewmodel.dart';
@@ -18,7 +20,16 @@ import 'views/add_task_page.dart';
 import 'views/project_details_page.dart';
 import 'views/task_details_page.dart';
 
-void main() {
+import 'services/task_notification_manager.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  // Initialize notification manager (this will also initialize Firebase)
+  await TaskNotificationManager().initialize();
+
   runApp(
     MultiProvider(
       providers: [
