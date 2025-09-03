@@ -303,6 +303,16 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   vm.startDate ??
                                   DateTime.now().add(const Duration(days: 1)),
                               onTap: () async {
+                                print(
+                                  '🔄 AddTaskPage: Opening Start Date picker...',
+                                );
+                                print(
+                                  '🔄 AddTaskPage: Current start date: ${vm.startDate}',
+                                );
+                                print(
+                                  '🔄 AddTaskPage: Initial date: ${vm.startDate ?? DateTime.now().add(const Duration(days: 1))}',
+                                );
+
                                 final date = await showDatePicker(
                                   context: context,
                                   initialDate:
@@ -313,7 +323,20 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   firstDate: DateTime(2020),
                                   lastDate: DateTime(2030),
                                 );
-                                if (date != null) vm.setStartDate(date);
+
+                                if (date != null) {
+                                  print(
+                                    '✅ AddTaskPage: Start Date selected: ${date.toString()}',
+                                  );
+                                  print(
+                                    '✅ AddTaskPage: Date components - Year: ${date.year}, Month: ${date.month}, Day: ${date.day}',
+                                  );
+                                  vm.setStartDate(date);
+                                } else {
+                                  print(
+                                    '❌ AddTaskPage: Start Date selection cancelled',
+                                  );
+                                }
                               },
                             ),
                             const SizedBox(height: 16),
@@ -323,11 +346,37 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               label: "Start Time",
                               time: vm.startTime,
                               onTap: () async {
+                                print(
+                                  '🔄 AddTaskPage: Opening Start Time picker...',
+                                );
+                                print(
+                                  '🔄 AddTaskPage: Current start time: ${vm.startTime}',
+                                );
+                                print(
+                                  '🔄 AddTaskPage: Initial time: ${vm.startTime ?? TimeOfDay.now()}',
+                                );
+
                                 final time = await showTimePicker(
                                   context: context,
                                   initialTime: vm.startTime ?? TimeOfDay.now(),
                                 );
-                                if (time != null) vm.setStartTime(time);
+
+                                if (time != null) {
+                                  print(
+                                    '✅ AddTaskPage: Start Time selected: ${time.toString()}',
+                                  );
+                                  print(
+                                    '✅ AddTaskPage: Time components - Hour: ${time.hour}, Minute: ${time.minute}',
+                                  );
+                                  print(
+                                    '✅ AddTaskPage: 12-hour format: ${time.format(context)}',
+                                  );
+                                  vm.setStartTime(time);
+                                } else {
+                                  print(
+                                    '❌ AddTaskPage: Start Time selection cancelled',
+                                  );
+                                }
                               },
                             ),
                             const SizedBox(height: 16),
@@ -339,6 +388,16 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   vm.deadline ??
                                   DateTime.now().add(const Duration(days: 2)),
                               onTap: () async {
+                                print(
+                                  '🔄 AddTaskPage: Opening End Date picker...',
+                                );
+                                print(
+                                  '🔄 AddTaskPage: Current deadline: ${vm.deadline}',
+                                );
+                                print(
+                                  '🔄 AddTaskPage: Initial date: ${vm.deadline ?? DateTime.now().add(const Duration(days: 2))}',
+                                );
+
                                 final date = await showDatePicker(
                                   context: context,
                                   initialDate:
@@ -349,7 +408,20 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   firstDate: DateTime(2020),
                                   lastDate: DateTime(2030),
                                 );
-                                if (date != null) vm.setDeadline(date);
+
+                                if (date != null) {
+                                  print(
+                                    '✅ AddTaskPage: End Date selected: ${date.toString()}',
+                                  );
+                                  print(
+                                    '✅ AddTaskPage: Date components - Year: ${date.year}, Month: ${date.month}, Day: ${date.day}',
+                                  );
+                                  vm.setDeadline(date);
+                                } else {
+                                  print(
+                                    '❌ AddTaskPage: End Date selection cancelled',
+                                  );
+                                }
                               },
                             ),
                             const SizedBox(height: 16),
@@ -359,11 +431,37 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               label: "End Time",
                               time: vm.endTime,
                               onTap: () async {
+                                print(
+                                  '🔄 AddTaskPage: Opening End Time picker...',
+                                );
+                                print(
+                                  '🔄 AddTaskPage: Current end time: ${vm.endTime}',
+                                );
+                                print(
+                                  '🔄 AddTaskPage: Initial time: ${vm.endTime ?? TimeOfDay.now()}',
+                                );
+
                                 final time = await showTimePicker(
                                   context: context,
                                   initialTime: vm.endTime ?? TimeOfDay.now(),
                                 );
-                                if (time != null) vm.setEndTime(time);
+
+                                if (time != null) {
+                                  print(
+                                    '✅ AddTaskPage: End Time selected: ${time.toString()}',
+                                  );
+                                  print(
+                                    '✅ AddTaskPage: Time components - Hour: ${time.hour}, Minute: ${time.minute}',
+                                  );
+                                  print(
+                                    '✅ AddTaskPage: 12-hour format: ${time.format(context)}',
+                                  );
+                                  vm.setEndTime(time);
+                                } else {
+                                  print(
+                                    '❌ AddTaskPage: End Time selection cancelled',
+                                  );
+                                }
                               },
                             ),
                             const SizedBox(height: 16),

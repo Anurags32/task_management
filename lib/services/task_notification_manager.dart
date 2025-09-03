@@ -76,6 +76,19 @@ class TaskNotificationManager {
           );
         }
 
+        print(
+          '🔄 TaskNotificationManager: Scheduling 5-minute deadline reminder...',
+        );
+        // Schedule 5-minute deadline reminder
+        await _notificationService.scheduleDeadlineReminder(
+          taskId: taskId,
+          taskName: taskName,
+          deadline: endTime,
+        );
+        print(
+          '✅ TaskNotificationManager: 5-minute deadline reminder scheduled',
+        );
+
         // Final notification at allocated end time
         await _notificationService.scheduleTaskDeadline(
           taskId: taskId,
@@ -98,7 +111,19 @@ class TaskNotificationManager {
         );
 
         if (taskDetails != null && taskDetails['date_deadline'] != null) {
-          final deadline = DateTime.parse(taskDetails['date_deadline']);
+          final raw = taskDetails['date_deadline'].toString();
+          DateTime deadline = DateTime.parse(raw);
+          // If only a date is provided (no time), use end-of-day local so reminders are in future
+          final isDateOnly = !raw.contains('T') && !raw.contains(' ');
+          if (isDateOnly) {
+            deadline = DateTime(
+              deadline.year,
+              deadline.month,
+              deadline.day,
+              23,
+              59,
+            );
+          }
 
           // Schedule reminders at 30, 45, and 55 minutes before deadline
           await _notificationService.scheduleTaskReminder(
@@ -120,6 +145,19 @@ class TaskNotificationManager {
             taskName: taskName,
             deadline: deadline,
             reminderMinutes: 55,
+          );
+
+          print(
+            '🔄 TaskNotificationManager: Scheduling 5-minute deadline reminder for server task...',
+          );
+          // Schedule 5-minute deadline reminder
+          await _notificationService.scheduleDeadlineReminder(
+            taskId: taskId,
+            taskName: taskName,
+            deadline: deadline,
+          );
+          print(
+            '✅ TaskNotificationManager: 5-minute deadline reminder scheduled for server task',
           );
 
           // Schedule deadline notification
@@ -183,13 +221,85 @@ class TaskNotificationManager {
     try {
       await _notificationService.initialize();
       print('TaskNotificationManager initialized successfully');
+      
+      // Check for existing tasks with deadlines and schedule reminders
+      await _scheduleRemindersForExistingTasks();
+      
     } catch (e) {
       print('Error initializing TaskNotificationManager: $e');
+    }
+  }
+
+  /// Schedule reminders for existing tasks that have deadlines
+  Future<void> _scheduleRemindersForExistingTasks() async {
+    try {
+      print('🔄 TaskNotificationManager: Checking for existing tasks with deadlines...');
+      
+      final tasksResult = await _taskService.getAllTasks();
+      if (tasksResult['success'] == true) {
+        final tasks = tasksResult['data'] as List<dynamic>?;
+        if (tasks != null) {
+          int scheduledCount = 0;
+          for (final task in tasks) {
+            final taskData = Map<String, dynamic>.from(task);
+            final taskId = taskData['id'] as int?;
+            final taskName = taskData['name']?.toString() ?? 'Task';
+            final deadlineStr = taskData['date_deadline']?.toString();
+            
+            if (taskId != null && deadlineStr != null && deadlineStr.isNotEmpty) {
+              try {
+                final deadline = DateTime.parse(deadlineStr);
+                final now = DateTime.now();
+                
+                // Only schedule if deadline is in the future
+                if (deadline.isAfter(now)) {
+                  // Check if we're within 5 minutes of deadline
+                  final timeUntilDeadline = deadline.difference(now);
+                  if (timeUntilDeadline.inMinutes > 5) {
+                    // Schedule 5-minute reminder
+                    await _notificationService.scheduleDeadlineReminder(
+                      taskId: taskId,
+                      taskName: taskName,
+                      deadline: deadline,
+                    );
+                    scheduledCount++;
+                    print('✅ TaskNotificationManager: Scheduled reminder for existing task $taskId (${taskName})');
+                  } else if (timeUntilDeadline.inMinutes > 0) {
+                    // If within 5 minutes but not passed, show immediate reminder
+                    await _notificationService.showTaskAssignmentNotification(
+                      taskId: taskId,
+                      taskName: taskName,
+                      projectName: 'System',
+                    );
+                    print('⚠️ TaskNotificationManager: Showed immediate reminder for task $taskId (${taskName}) - due soon!');
+                  }
+                }
+              } catch (e) {
+                print('⚠️ TaskNotificationManager: Failed to parse deadline for task $taskId: $e');
+              }
+            }
+          }
+          print('✅ TaskNotificationManager: Scheduled reminders for $scheduledCount existing tasks');
+        }
+      }
+    } catch (e) {
+      print('⚠️ TaskNotificationManager: Error scheduling reminders for existing tasks: $e');
     }
   }
 
   /// Dispose resources
   void dispose() {
     _notificationService.dispose();
+  }
+
+  /// Public method to manually refresh reminders for all tasks
+  Future<void> refreshAllTaskReminders() async {
+    try {
+      print('🔄 TaskNotificationManager: Manually refreshing all task reminders...');
+      await _scheduleRemindersForExistingTasks();
+      print('✅ TaskNotificationManager: All task reminders refreshed successfully');
+    } catch (e) {
+      print('❌ TaskNotificationManager: Error refreshing task reminders: $e');
+    }
   }
 }

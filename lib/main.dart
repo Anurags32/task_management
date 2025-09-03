@@ -1,15 +1,16 @@
-import 'package:firebase_core/firebase_core.dart' show Firebase;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:task_management/firebase_options.dart'
-    show DefaultFirebaseOptions;
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'theme.dart';
+
 import 'viewmodels/landing_viewmodel.dart';
 import 'viewmodels/onboarding_viewmodel.dart';
 import 'viewmodels/login_viewmodel.dart';
 import 'viewmodels/user_dashboard_viewmodel.dart';
 import 'viewmodels/admin_dashboard_viewmodel.dart';
 import 'viewmodels/add_task_viewmodel.dart';
+
 import 'views/landing_page.dart';
 import 'views/onboarding_page.dart';
 import 'views/login_page.dart';
@@ -18,6 +19,8 @@ import 'views/admin_dashboard_page.dart';
 import 'views/add_task_page.dart';
 import 'views/project_details_page.dart';
 import 'views/task_details_page.dart';
+import 'views/debug_notification_page.dart';
+
 import 'services/task_notification_manager.dart';
 
 void main() async {
@@ -76,6 +79,7 @@ class MyApp extends StatelessWidget {
                   as Map<String, dynamic>;
           return TaskDetailsPage(task: args);
         },
+        '/debug_notifications': (context) => const DebugNotificationPage(),
       },
     );
   }

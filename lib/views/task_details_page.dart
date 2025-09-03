@@ -575,7 +575,10 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
     if (date == null) return 'N/A';
     try {
       final dateTime = DateTime.parse(date.toString());
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+      final hour12 = (dateTime.hour % 12 == 0) ? 12 : (dateTime.hour % 12);
+      final minute = dateTime.minute.toString().padLeft(2, '0');
+      final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at $hour12:$minute $period';
     } catch (e) {
       return date.toString();
     }

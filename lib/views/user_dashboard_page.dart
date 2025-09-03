@@ -1,5 +1,9 @@
+import 'dart:async' show Timer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:task_management/services/task_notification_manager.dart'
+    show TaskNotificationManager;
 import '../viewmodels/user_dashboard_viewmodel.dart';
 
 class UserDashboardPage extends StatefulWidget {
@@ -11,21 +15,103 @@ class UserDashboardPage extends StatefulWidget {
 
 class _UserDashboardPageState extends State<UserDashboardPage>
     with WidgetsBindingObserver {
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final vm = context.read<UserDashboardViewModel>();
-      vm.loadUserData();
+
+    // initial load
+    Future.microtask(() {
+      final viewModel = context.read<UserDashboardViewModel>();
+      viewModel.loadUserData();
+      _scheduleDeadlineRefresh(viewModel);
     });
+  }
+
+  Future<void> _onUserRefresh(UserDashboardViewModel vm) async {
+    await vm.refresh();
+
+    try {
+      final latestTask = vm.latestTask;
+      final String? deadlineStr = latestTask?['date_deadline']?.toString();
+      if (deadlineStr == null || deadlineStr.isEmpty) return;
+
+      final DateTime? deadline = DateTime.tryParse(deadlineStr);
+      if (deadline == null) return;
+
+      final DateTime now = DateTime.now();
+      if (deadline.isAfter(now.add(const Duration(minutes: 5)))) {
+        final taskNotificationManager = TaskNotificationManager();
+        await taskNotificationManager.refreshAllTaskReminders();
+      }
+
+      _scheduleDeadlineRefresh(vm);
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   WidgetsBinding.instance.addObserver(this);
+  //   WidgetsBinding.instance.addPostFrameCallback((_) {
+  //     final vm = context.read<UserDashboardViewModel>();
+  //     vm.loadUserData();
+
+  //   });
+  // }
+
+  void _scheduleDeadlineRefresh(UserDashboardViewModel viewModel) {
+    _refreshTimer?.cancel();
+
+    final tasks = viewModel.tasks;
+    if (tasks.isEmpty) return;
+
+    // sabse nearest deadline pick karo
+    tasks.sort((a, b) {
+      final da = DateTime.tryParse(a['date_deadline'] ?? '') ?? DateTime.now();
+      final db = DateTime.tryParse(b['date_deadline'] ?? '') ?? DateTime.now();
+      return da.compareTo(db);
+    });
+
+    final nearestDeadline = DateTime.tryParse(
+      tasks.first['date_deadline'] ?? '',
+    );
+    if (nearestDeadline == null) return;
+
+    // 5 min pehle ka time nikalo
+    final refreshTime = nearestDeadline.subtract(const Duration(minutes: 5));
+    final now = DateTime.now();
+    print("====$refreshTime");
+    if (refreshTime.isAfter(now)) {
+      final duration = refreshTime.difference(now);
+      _refreshTimer = Timer(duration, () async {
+        // 🔄 page refresh
+        await viewModel.loadUserData();
+        setState(() {});
+
+        // 🔔 notifications refresh
+        final taskNotificationManager = TaskNotificationManager();
+        await taskNotificationManager.refreshAllTaskReminders();
+
+        print("✅ Page and notifications refreshed 5 min before deadline");
+      });
+    }
+  }
+
+  // @override
+  // void dispose() {
+  //   WidgetsBinding.instance.removeObserver(this);
+  //   super.dispose();
+  // }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -99,8 +185,131 @@ class _UserDashboardPageState extends State<UserDashboardPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header with Logout Button
-                      _buildHeader(vm),
+                      // Auto-refresh indicator
+                      if (vm.wasAutoRefreshed && vm.autoRefreshReason != null)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            border: Border.all(color: Colors.orange.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.refresh,
+                                color: Colors.orange.shade600,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Dashboard auto-refreshed: ${vm.autoRefreshReason}',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade700,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Welcome Section
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 25,
+                                  backgroundColor: Colors.purple.shade100,
+                                  child: Icon(
+                                    Icons.person,
+                                    color: Colors.purple.shade700,
+                                    size: 30,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "Welcome Back!",
+                                        style: TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        "You have ${vm.tasks.length} assigned tasks",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Logout Button
+                                IconButton(
+                                  onPressed: () =>
+                                      _showLogoutDialog(context, vm),
+                                  icon: const Icon(Icons.logout),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.red.shade50,
+                                    foregroundColor: Colors.red.shade600,
+                                    elevation: 2,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Refresh Button
+                                IconButton(
+                                  onPressed: () => _onUserRefresh(vm),
+                                  icon: const Icon(Icons.refresh),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    elevation: 2,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Debug Button
+                                // IconButton(
+                                //   onPressed: () => Navigator.pushNamed(
+                                //     context,
+                                //     '/debug_notifications',
+                                //   ),
+                                //   icon: const Icon(Icons.bug_report),
+                                //   style: IconButton.styleFrom(
+                                //     backgroundColor: Colors.orange.shade50,
+                                //     foregroundColor: Colors.orange.shade600,
+                                //     elevation: 2,
+                                //   ),
+                                // ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 32),
 
                       // Latest Task Section
@@ -169,6 +378,17 @@ class _UserDashboardPageState extends State<UserDashboardPage>
           icon: const Icon(Icons.refresh),
           style: IconButton.styleFrom(
             backgroundColor: Colors.white,
+            elevation: 2,
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Debug Button
+        IconButton(
+          onPressed: () => Navigator.pushNamed(context, '/debug_notifications'),
+          icon: const Icon(Icons.bug_report),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.orange.shade50,
+            foregroundColor: Colors.orange.shade600,
             elevation: 2,
           ),
         ),
@@ -323,7 +543,7 @@ class _UserDashboardPageState extends State<UserDashboardPage>
                       ),
                     ),
                     const Spacer(),
-                    if (latestTask['date_deadline'] != null) ...[
+                    if (_isValidDateValue(latestTask['date_deadline'])) ...[
                       Icon(
                         Icons.schedule,
                         size: 14,
@@ -332,7 +552,7 @@ class _UserDashboardPageState extends State<UserDashboardPage>
                       const SizedBox(width: 4),
 
                       Text(
-                        'Deadline: ${_formatDate(latestTask['write_date'])}',
+                        'Deadline: ${_formatDate(latestTask['date_deadline'])}',
                         style: TextStyle(
                           color: Colors.orange.shade600,
                           fontSize: 12,
@@ -668,11 +888,11 @@ class _UserDashboardPageState extends State<UserDashboardPage>
                 ],
                 if (task['date_start'] != null && task['date_deadline'] != null)
                   const SizedBox(width: 8),
-                if (task['date_deadline'] != null) ...[
+                if (_isValidDateValue(task['date_deadline'])) ...[
                   Icon(Icons.schedule, size: 14, color: Colors.orange.shade600),
                   const SizedBox(width: 4),
                   Text(
-                    'Deadline: ${_formatDate(task['write_date'])}',
+                    'Deadline: ${_formatDate(task['date_deadline'])}',
                     style: TextStyle(
                       color: Colors.orange.shade600,
                       fontSize: 10,
@@ -1013,11 +1233,27 @@ class _UserDashboardPageState extends State<UserDashboardPage>
     }
   }
 
+  bool _isValidDateValue(dynamic v) {
+    if (v == null) return false;
+    final s = v.toString().trim().toLowerCase();
+    if (s.isEmpty) return false;
+    if (s == 'false' || s == '0') return false;
+    return true;
+  }
+
   String _formatDate(dynamic date) {
-    if (date == null) return 'N/A';
+    if (!_isValidDateValue(date)) return 'N/A';
     try {
-      final dateTime = DateTime.parse(date.toString());
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+      // Accept both 'YYYY-MM-DD HH:MM:SS' and ISO 'YYYY-MM-DDTHH:MM:SS'
+      final raw = date.toString();
+      final normalized = raw.contains('T') ? raw : raw.replaceFirst(' ', 'T');
+      final dt = DateTime.parse(normalized);
+      final dd = dt.day.toString().padLeft(2, '0');
+      final mm = dt.month.toString().padLeft(2, '0');
+      final yyyy = dt.year.toString();
+      final HH = dt.hour.toString().padLeft(2, '0');
+      final MM = dt.minute.toString().padLeft(2, '0');
+      return '$dd/$mm/$yyyy $HH:$MM';
     } catch (e) {
       return date.toString();
     }

@@ -11,12 +11,16 @@ class UserDashboardViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   Map<String, dynamic>? _currentUser;
+  bool _wasAutoRefreshed = false; // Track if dashboard was auto-refreshed
+  String? _autoRefreshReason; // Reason for auto-refresh
 
   List<Map<String, dynamic>> get tasks => List.unmodifiable(_tasks);
   List<Map<String, dynamic>> get projects => List.unmodifiable(_projects);
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   Map<String, dynamic>? get currentUser => _currentUser;
+  bool get wasAutoRefreshed => _wasAutoRefreshed;
+  String? get autoRefreshReason => _autoRefreshReason;
 
   // Listen to push events to auto-refresh data
   StreamSubscription<Map<String, dynamic>>? _pushSub;
@@ -33,13 +37,39 @@ class UserDashboardViewModel extends ChangeNotifier {
         if (event['type'] == 'task_assigned') {
           final uid = _currentUser?['uid'] as int?;
           if (uid != null) {
-            await loadUserData();
+            await _autoRefreshDashboard('Task assigned');
           }
+        } else if (event['type'] == 'deadline_reminder') {
+          // Auto-refresh dashboard when deadline reminder is triggered
+          print(
+            '🔄 UserDashboardViewModel: Deadline reminder received, auto-refreshing dashboard...',
+          );
+          final taskName = event['task_name']?.toString() ?? 'Task';
+          final deadline = event['deadline']?.toString() ?? '';
+          await _autoRefreshDashboard(
+            'Deadline reminder for: $taskName (Due: $deadline)',
+          );
         }
       });
     } catch (e) {
       // ignore
     }
+  }
+
+  /// Auto-refresh dashboard with reason tracking
+  Future<void> _autoRefreshDashboard(String reason) async {
+    _wasAutoRefreshed = true;
+    _autoRefreshReason = reason;
+    await loadUserData();
+
+    // Reset the flag after a delay so UI can show the message
+    Future.delayed(const Duration(seconds: 5), () {
+      _wasAutoRefreshed = false;
+      _autoRefreshReason = null;
+      notifyListeners();
+    });
+
+    notifyListeners();
   }
 
   @override
@@ -215,7 +245,8 @@ class UserDashboardViewModel extends ChangeNotifier {
       final dl = task['date_deadline'];
       if (dl is String && dl.isNotEmpty) {
         try {
-          deadline = DateTime.parse(dl);
+          final normalized = dl.contains('T') ? dl : dl.replaceFirst(' ', 'T');
+          deadline = DateTime.parse(normalized);
         } catch (_) {}
       }
 
@@ -237,6 +268,17 @@ class UserDashboardViewModel extends ChangeNotifier {
             reminderMinutes: minutesBeforeEnd,
           );
         }
+        print(
+          '🔄 UserDashboardViewModel: Scheduling 5-minute deadline reminder...',
+        );
+        // Schedule 5-minute deadline reminder
+        await notificationService.scheduleDeadlineReminder(
+          taskId: taskId,
+          taskName: taskName,
+          deadline: endTime,
+        );
+        print('✅ UserDashboardViewModel: 5-minute deadline reminder scheduled');
+
         await notificationService.scheduleTaskDeadline(
           taskId: taskId,
           taskName: taskName,
@@ -265,6 +307,19 @@ class UserDashboardViewModel extends ChangeNotifier {
           deadline: deadline,
           reminderMinutes: 55,
         );
+        print(
+          '🔄 UserDashboardViewModel: Scheduling 5-minute deadline reminder for server task...',
+        );
+        // Schedule 5-minute deadline reminder
+        await notificationService.scheduleDeadlineReminder(
+          taskId: taskId,
+          taskName: taskName,
+          deadline: deadline,
+        );
+        print(
+          '✅ UserDashboardViewModel: 5-minute deadline reminder scheduled for server task',
+        );
+
         await notificationService.scheduleTaskDeadline(
           taskId: taskId,
           taskName: taskName,

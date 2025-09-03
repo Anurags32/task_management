@@ -351,6 +351,15 @@ class _AdminDashboardContent extends StatelessWidget {
                             icon: const Icon(Icons.refresh),
                             onPressed: vm.refresh,
                           ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.bug_report),
+                            onPressed: () => Navigator.pushNamed(
+                              context,
+                              '/debug_notifications',
+                            ),
+                            tooltip: 'Debug Notifications',
+                          ),
                         ],
                       ),
 
@@ -706,7 +715,10 @@ class _AdminDashboardContent extends StatelessWidget {
     if (date is String) {
       try {
         final dateTime = DateTime.parse(date);
-        return "${dateTime.day.toString().padLeft(2, '0')}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}";
+        final hour12 = (dateTime.hour % 12 == 0) ? 12 : (dateTime.hour % 12);
+        final minute = dateTime.minute.toString().padLeft(2, '0');
+        final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+        return "${dateTime.day.toString().padLeft(2, '0')}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.year} at $hour12:$minute $period";
       } catch (e) {
         return date;
       }

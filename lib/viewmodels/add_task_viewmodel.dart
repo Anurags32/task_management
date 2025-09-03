@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/task_service.dart';
 import '../services/odoo_client.dart'; // Added import for OdooClient
+import '../services/notification_service.dart'; // Added import for NotificationService
 
 class AddTaskViewModel extends ChangeNotifier {
   final TextEditingController titleController = TextEditingController();
@@ -131,25 +132,41 @@ class AddTaskViewModel extends ChangeNotifier {
 
   /// Set deadline
   void setDeadline(DateTime? deadline) {
+    print(
+      '🔄 AddTaskViewModel: setDeadline called with: ${deadline?.toString()}',
+    );
     _deadline = deadline;
+    print('✅ AddTaskViewModel: Deadline set to: ${_deadline?.toString()}');
     notifyListeners();
   }
 
   /// Set start date
   void setStartDate(DateTime? startDate) {
+    print(
+      '🔄 AddTaskViewModel: setStartDate called with: ${startDate?.toString()}',
+    );
     _startDate = startDate;
+    print('✅ AddTaskViewModel: Start date set to: ${_startDate?.toString()}');
     notifyListeners();
   }
 
   /// Set start time
   void setStartTime(TimeOfDay? startTime) {
+    print(
+      '🔄 AddTaskViewModel: setStartTime called with: ${startTime?.toString()}',
+    );
     _startTime = startTime;
+    print('✅ AddTaskViewModel: Start time set to: ${_startTime?.toString()}');
     notifyListeners();
   }
 
   /// Set end time
   void setEndTime(TimeOfDay? endTime) {
+    print(
+      '🔄 AddTaskViewModel: setEndTime called with: ${endTime?.toString()}',
+    );
     _endTime = endTime;
+    print('✅ AddTaskViewModel: End time set to: ${_endTime?.toString()}');
     notifyListeners();
   }
 
@@ -161,16 +178,33 @@ class AddTaskViewModel extends ChangeNotifier {
 
   /// Get deadline with time
   DateTime? getDeadlineWithTime() {
-    if (_deadline == null) return null;
-    if (_endTime == null) return _deadline;
+    print('🔄 AddTaskViewModel: getDeadlineWithTime called');
+    print('🔄 AddTaskViewModel: _deadline: ${_deadline?.toString()}');
+    print('🔄 AddTaskViewModel: _endTime: ${_endTime?.toString()}');
 
-    return DateTime(
+    if (_deadline == null) {
+      print('❌ AddTaskViewModel: No deadline set, returning null');
+      return null;
+    }
+    if (_endTime == null) {
+      print(
+        '⚠️ AddTaskViewModel: No end time set, returning deadline without time: ${_deadline?.toString()}',
+      );
+      return _deadline;
+    }
+
+    final deadlineWithTime = DateTime(
       _deadline!.year,
       _deadline!.month,
       _deadline!.day,
       _endTime!.hour,
       _endTime!.minute,
     );
+
+    print(
+      '✅ AddTaskViewModel: Combined deadline with time: ${deadlineWithTime.toString()}',
+    );
+    return deadlineWithTime;
   }
 
   /// Get start date with time
@@ -195,6 +229,15 @@ class AddTaskViewModel extends ChangeNotifier {
 
   /// Submit task creation
   Future<bool> submit() async {
+    print('🔄 AddTaskViewModel: submit() called');
+    print('🔄 AddTaskViewModel: Task title: ${titleController.text.trim()}');
+    print(
+      '🔄 AddTaskViewModel: Task description: ${descriptionController.text.trim()}',
+    );
+    print('🔄 AddTaskViewModel: Selected project ID: $_selectedProjectId');
+    print('🔄 AddTaskViewModel: Selected assignee IDs: $_selectedAssigneeIds');
+    print('🔄 AddTaskViewModel: Selected priority: $_selectedPriority');
+
     _errorMessage = null;
     final title = titleController.text.trim();
     final description = descriptionController.text.trim();
@@ -213,6 +256,8 @@ class AddTaskViewModel extends ChangeNotifier {
           ? int.tryParse(_allottedTime!)
           : null;
 
+      print('🔄 AddTaskViewModel: Allocated minutes: $allocatedMinutes');
+
       // If allocated time provided, embed it in description so user app can schedule
       String finalDescription = description.isEmpty
           ? 'No description'
@@ -222,24 +267,66 @@ class AddTaskViewModel extends ChangeNotifier {
             '$finalDescription\nAllocated: ${allocatedMinutes.toString()}';
       }
 
+      print('🔄 AddTaskViewModel: Final description: $finalDescription');
+
+      // Get deadline and start date with time
+      final deadlineWithTime = getDeadlineWithTime();
+      final startDateWithTime = getStartDateWithTime();
+
+      print(
+        '🔄 AddTaskViewModel: Deadline with time: ${deadlineWithTime?.toString()}',
+      );
+      print(
+        '🔄 AddTaskViewModel: Start date with time: ${startDateWithTime?.toString()}',
+      );
+
       final result = await TaskService().createTask(
         name: title,
         description: finalDescription,
         projectId: _selectedProjectId,
         userIds: _selectedAssigneeIds.isNotEmpty ? _selectedAssigneeIds : null,
         priority: _selectedPriority,
-        deadline: getDeadlineWithTime(),
-        dateStart: getStartDateWithTime(),
+        deadline: deadlineWithTime,
+        dateStart: startDateWithTime,
         allocatedMinutes: allocatedMinutes,
       );
 
+      print('🔄 AddTaskViewModel: Task creation result: $result');
+
       if (result['success'] == true) {
+        print('✅ AddTaskViewModel: Task created successfully!');
+
+        // Schedule deadline reminder notification if deadline is set
+        if (deadlineWithTime != null) {
+          try {
+            final taskId = result['id'] as int?;
+            if (taskId != null) {
+              await NotificationService().scheduleDeadlineReminder(
+                taskId: taskId,
+                taskName: title,
+                deadline: deadlineWithTime,
+              );
+              print(
+                '✅ AddTaskViewModel: Deadline reminder scheduled for task $taskId',
+              );
+            }
+          } catch (e) {
+            print(
+              '⚠️ AddTaskViewModel: Failed to schedule deadline reminder: $e',
+            );
+            // Don't fail the task creation if reminder scheduling fails
+          }
+        }
+
         return true;
       } else {
-        _errorMessage = result['error'] ?? 'Failed to create task.';
+        final error = result['error'] ?? 'Failed to create task.';
+        print('❌ AddTaskViewModel: Task creation failed: $error');
+        _errorMessage = error;
         return false;
       }
     } catch (e) {
+      print('❌ AddTaskViewModel: Exception during task creation: $e');
       _errorMessage = 'Failed to create task. Please try again.';
       return false;
     } finally {

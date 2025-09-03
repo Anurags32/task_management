@@ -267,6 +267,24 @@ class AdminDashboardViewModel extends ChangeNotifier {
       );
 
       if (result['success'] == true) {
+        // Schedule deadline reminder notification if deadline is set
+        if (deadline != null) {
+          try {
+            final taskId = result['id'] as int?;
+            if (taskId != null) {
+              await NotificationService().scheduleDeadlineReminder(
+                taskId: taskId,
+                taskName: name,
+                deadline: deadline,
+              );
+              print('✅ AdminDashboardViewModel: Deadline reminder scheduled for task $taskId');
+            }
+          } catch (e) {
+            print('⚠️ AdminDashboardViewModel: Failed to schedule deadline reminder: $e');
+            // Don't fail the task creation if reminder scheduling fails
+          }
+        }
+        
         await refresh();
         return true;
       } else {

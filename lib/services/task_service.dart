@@ -1,5 +1,6 @@
 import 'package:task_management/services/odoo_client.dart';
 import 'package:task_management/services/task_notification_manager.dart';
+import 'package:task_management/services/notification_service.dart'; // Added import for NotificationService
 
 class TaskService {
   static final TaskService _instance = TaskService._internal();
@@ -270,6 +271,44 @@ class TaskService {
         } else if (state == '4' ||
             (state?.toLowerCase().contains('cancel') ?? false)) {
           await TaskNotificationManager().handleTaskCancellation(taskId);
+        }
+
+        // Handle deadline change - cancel old notifications and schedule new ones
+        if (deadline != null) {
+          try {
+            // Cancel existing deadline notifications
+            await NotificationService().cancelTaskNotifications(taskId);
+            
+            // Schedule new deadline reminder
+            String taskName = 'Task';
+            try {
+              final taskInfo = await OdooClient.instance.searchRead(
+                model: 'project.task',
+                fields: ['id', 'name'],
+                domain: [
+                  ['id', '=', taskId],
+                ],
+                limit: 1,
+              );
+              if (taskInfo['success'] == true) {
+                final list = taskInfo['data'] as List<dynamic>?;
+                if (list != null && list.isNotEmpty) {
+                  final m = Map<String, dynamic>.from(list.first);
+                  taskName = (m['name']?.toString() ?? taskName);
+                }
+              }
+            } catch (_) {}
+            
+            await NotificationService().scheduleDeadlineReminder(
+              taskId: taskId,
+              taskName: taskName,
+              deadline: deadline,
+            );
+            print('✅ TaskService: Updated deadline reminder scheduled for task $taskId');
+          } catch (e) {
+            print('⚠️ TaskService: Failed to update deadline reminder: $e');
+            // Don't fail the task update if reminder scheduling fails
+          }
         }
 
         // Notify admins about status update (completed/hold/in_progress/etc.)

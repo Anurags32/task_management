@@ -146,12 +146,23 @@ class NotificationService {
   static const String _taskAssignmentChannel = 'task_assignment';
   static const String _taskReminderChannel = 'task_reminder';
   static const String _taskDeadlineChannel = 'task_deadline';
+  static const String _deadlineReminderChannel = 'deadline_reminder';
 
   /// Initialize Firebase and local notifications
   Future<void> initialize() async {
     try {
       // Initialize timezone
       tz.initializeTimeZones();
+      // Force app to use India Standard Time (Asia/Kolkata)
+      try {
+        tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
+      } catch (_) {
+        // Fallback silently if location not found
+      }
+      print('✅ Timezone initialized');
+      print('Current timezone: ${tz.local.name}');
+      print('Current TZ time: ${tz.TZDateTime.now(tz.local)}');
+      print('Current local time: ${DateTime.now()}');
 
       // Initialize Firebase with proper options
       await Firebase.initializeApp(
@@ -163,6 +174,9 @@ class NotificationService {
 
       // Initialize local notifications
       await _initializeLocalNotifications();
+
+      // Ensure Android-specific permissions (POST_NOTIFICATIONS, EXACT_ALARMS)
+      await _ensureAndroidPermissions();
 
       // Set up Firebase message handlers
       await _setupFirebaseMessaging();
@@ -193,13 +207,14 @@ class NotificationService {
       sound: true,
     );
 
+    print('Notification permission status: ${settings.authorizationStatus}');
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('User granted notification permission');
+      print('✅ User granted notification permission');
     } else if (settings.authorizationStatus ==
         AuthorizationStatus.provisional) {
-      print('User granted provisional notification permission');
+      print('⚠️ User granted provisional notification permission');
     } else {
-      print('User declined or has not accepted notification permission');
+      print('❌ User declined or has not accepted notification permission');
     }
   }
 
@@ -219,9 +234,24 @@ class NotificationService {
       initializationSettings,
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
+    print('✅ Local notifications initialized successfully');
 
     // Create notification channels for Android
     await _createNotificationChannels();
+  }
+
+  /// Android permissions that impact scheduled notifications
+  Future<void> _ensureAndroidPermissions() async {
+    try {
+      // flutter_local_notifications v19.4.1 does not expose
+      // requestPermission/areExactAlarmsPermitted on Android.
+      // We rely on manifest (SCHEDULE_EXACT_ALARM) + user settings.
+      debugPrint(
+        'Android exact alarms: relying on manifest + user settings (no runtime API in this version)',
+      );
+    } catch (e) {
+      print('Error ensuring Android permissions: $e');
+    }
   }
 
   /// Create notification channels for Android
@@ -253,23 +283,43 @@ class NotificationService {
       enableVibration: true,
     );
 
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(androidChannelSettings);
+    const androidDeadlineReminderChannelSettings = AndroidNotificationChannel(
+      _deadlineReminderChannel,
+      'Deadline Reminders',
+      description: 'Notifications for deadline reminders',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
 
-    await _localNotifications
+    final androidImpl = _localNotifications
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(androidReminderChannelSettings);
+        >();
 
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(androidDeadlineChannelSettings);
+    if (androidImpl != null) {
+      await androidImpl.createNotificationChannel(androidChannelSettings);
+      print('✅ Task assignment channel created');
+
+      await androidImpl.createNotificationChannel(
+        androidReminderChannelSettings,
+      );
+      print('✅ Task reminder channel created');
+
+      await androidImpl.createNotificationChannel(
+        androidDeadlineChannelSettings,
+      );
+      print('✅ Task deadline channel created');
+
+      await androidImpl.createNotificationChannel(
+        androidDeadlineReminderChannelSettings,
+      );
+      print('✅ Deadline reminder notification channel created successfully');
+    } else {
+      print(
+        '❌ Could not create notification channels - Android implementation not available',
+      );
+    }
   }
 
   /// Set up Firebase messaging handlers
@@ -372,6 +422,18 @@ class NotificationService {
       if (deadlineStr != null && deadlineStr.isNotEmpty) {
         try {
           deadline = DateTime.parse(deadlineStr);
+          // If payload provided only a date (no time), schedule at end-of-day local
+          final isDateOnly =
+              !deadlineStr.contains('T') && !deadlineStr.contains(' ');
+          if (isDateOnly && deadline != null) {
+            deadline = DateTime(
+              deadline.year,
+              deadline.month,
+              deadline.day,
+              23,
+              59,
+            );
+          }
         } catch (_) {}
       }
 
@@ -388,6 +450,12 @@ class NotificationService {
             );
           }
         }
+        // Schedule 10-minute reminder before deadline
+        await scheduleDeadlineReminder(
+          taskId: taskId ?? message.hashCode,
+          taskName: taskName,
+          deadline: endTime,
+        );
         await scheduleTaskDeadline(
           taskId: taskId ?? message.hashCode,
           taskName: taskName,
@@ -402,6 +470,12 @@ class NotificationService {
             reminderMinutes: m,
           );
         }
+        // Schedule 10-minute reminder before deadline
+        await scheduleDeadlineReminder(
+          taskId: taskId ?? message.hashCode,
+          taskName: taskName,
+          deadline: deadline,
+        );
         await scheduleTaskDeadline(
           taskId: taskId ?? message.hashCode,
           taskName: taskName,
@@ -527,11 +601,43 @@ class NotificationService {
     }
   }
 
-  /// Handle notification tap
+  /// Handle notification tap and scheduled notification events
   void _onNotificationTapped(NotificationResponse response) {
     if (response.payload != null) {
-      final data = json.decode(response.payload!);
-      _handleNotificationTap(data);
+      try {
+        final data = json.decode(response.payload!);
+        final type = data['type'];
+
+        if (type == 'deadline_reminder') {
+          // This is a scheduled deadline reminder notification
+          final taskId = int.tryParse(data['task_id']?.toString() ?? '');
+          final taskName = data['task_name']?.toString() ?? 'Task';
+          final deadlineStr = data['deadline']?.toString();
+
+          if (taskId != null && deadlineStr != null) {
+            try {
+              final deadline = DateTime.parse(deadlineStr);
+              handleScheduledDeadlineReminder(
+                taskId: taskId,
+                taskName: taskName,
+                deadline: deadline,
+              );
+            } catch (e) {
+              print('❌ Error parsing deadline from notification: $e');
+            }
+          }
+        } else {
+          // Handle other notification types normally
+          _handleNotificationTap(data);
+        }
+      } catch (e) {
+        print('❌ Error handling notification response: $e');
+        // Fallback to normal handling
+        if (response.payload != null) {
+          final data = json.decode(response.payload!);
+          _handleNotificationTap(data);
+        }
+      }
     }
   }
 
@@ -564,8 +670,67 @@ class NotificationService {
         // Navigate to task details
         _navigateToTask(taskId);
         break;
+      case 'deadline_reminder':
+        // Navigate to task details
+        _navigateToTask(taskId);
+        break;
       default:
         print('Unknown notification type: $type');
+    }
+  }
+
+  /// Handle scheduled deadline reminder notification
+  Future<void> handleScheduledDeadlineReminder({
+    required int taskId,
+    required String taskName,
+    required DateTime deadline,
+  }) async {
+    try {
+      final deadlineLocal = tz.TZDateTime.from(deadline, tz.local);
+      final deadlineStr =
+          '${deadlineLocal.year}-${deadlineLocal.month.toString().padLeft(2, '0')}-${deadlineLocal.day.toString().padLeft(2, '0')} ${deadlineLocal.hour.toString().padLeft(2, '0')}:${deadlineLocal.minute.toString().padLeft(2, '0')}';
+
+      // Emit event to refresh dashboard
+      _emitEvent({
+        'type': 'deadline_reminder',
+        'task_id': taskId,
+        'task_name': taskName,
+        'deadline': deadlineStr,
+      });
+
+      // Show the deadline reminder notification
+      await _localNotifications.show(
+        taskId * 1000 + 1,
+        '⚠️ Deadline Reminder',
+        'Task "$taskName" is due in 5 minutes (Deadline: $deadlineStr)',
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _deadlineReminderChannel,
+            'Deadline Reminders',
+            channelDescription: 'Notifications for deadline reminders',
+            icon: '@mipmap/ic_launcher',
+            color: Colors.orange,
+            priority: Priority.high,
+            importance: Importance.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        payload: json.encode({
+          'type': 'deadline_reminder',
+          'task_id': taskId.toString(),
+          'task_name': taskName,
+        }),
+      );
+
+      print('✅ Deadline reminder notification sent for task $taskId');
+    } catch (e) {
+      print('❌ Error handling scheduled deadline reminder: $e');
     }
   }
 
@@ -654,35 +819,76 @@ class NotificationService {
 
     final notifId = taskId * 100 + reminderMinutes; // Unique ID
 
-    await _localNotifications.zonedSchedule(
-      notifId,
-      'Task Reminder',
-      'Task "$taskName" is due in ${reminderMinutes} minutes',
-      scheduledTime,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _taskReminderChannel,
-          'Task Reminders',
-          channelDescription: 'Notifications for task time reminders',
-          icon: '@mipmap/ic_launcher',
-          color: Colors.orange,
-          priority: Priority.defaultPriority,
-          importance: Importance.defaultImportance,
+    try {
+      await _localNotifications.zonedSchedule(
+        notifId,
+        'Task Reminder',
+        'Task "$taskName" is due in ${reminderMinutes} minutes',
+        scheduledTime,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _taskReminderChannel,
+            'Task Reminders',
+            channelDescription: 'Notifications for task time reminders',
+            icon: '@mipmap/ic_launcher',
+            color: Colors.orange,
+            priority: Priority.defaultPriority,
+            importance: Importance.defaultImportance,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: json.encode({
-        'type': 'task_reminder',
-        'task_id': taskId.toString(),
-        'task_name': taskName,
-        'reminder_minutes': reminderMinutes,
-      }),
-    );
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: json.encode({
+          'type': 'task_reminder',
+          'task_id': taskId.toString(),
+          'task_name': taskName,
+          'reminder_minutes': reminderMinutes,
+        }),
+      );
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('exact_alarms_not_permitted')) {
+        // Fallback to inexact scheduling so user still gets reminder
+        await _localNotifications.zonedSchedule(
+          notifId,
+          'Task Reminder',
+          'Task "$taskName" is due in ${reminderMinutes} minutes',
+          scheduledTime,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              _taskReminderChannel,
+              'Task Reminders',
+              channelDescription: 'Notifications for task time reminders',
+              icon: '@mipmap/ic_launcher',
+              color: Colors.orange,
+              priority: Priority.defaultPriority,
+              importance: Importance.defaultImportance,
+            ),
+            iOS: DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: json.encode({
+            'type': 'task_reminder',
+            'task_id': taskId.toString(),
+            'task_name': taskName,
+            'reminder_minutes': reminderMinutes,
+          }),
+        );
+        print(
+          '⚠️ Exact alarms not permitted. Scheduled inexact reminder for task $taskId.',
+        );
+      } else {
+        rethrow;
+      }
+    }
 
     // Track this scheduled notification ID so we can cancel later
     await _trackNotificationId(taskId, notifId);
@@ -739,6 +945,171 @@ class NotificationService {
     print('Scheduled deadline notification for task $taskId');
   }
 
+  /// Schedule notification 5 minutes before deadline with custom sound
+  Future<void> scheduleDeadlineReminder({
+    required int taskId,
+    required String taskName,
+    required DateTime deadline,
+  }) async {
+    print('=== DEBUG: scheduleDeadlineReminder called ===');
+    print('Task ID: $taskId, Task Name: $taskName');
+    print('Deadline: ${deadline.toString()}');
+    print('Current time: ${DateTime.now().toString()}');
+
+    // Schedule notification 5 minutes before deadline
+    final reminderTime = deadline.subtract(const Duration(minutes: 5));
+    final scheduledTime = tz.TZDateTime.from(reminderTime, tz.local);
+
+    final notifId = taskId * 1000 + 1; // Unique ID for deadline reminder
+    final deadlineLocal = tz.TZDateTime.from(deadline, tz.local);
+    final deadlineStr =
+        '${deadlineLocal.year}-${deadlineLocal.month.toString().padLeft(2, '0')}-${deadlineLocal.day.toString().padLeft(2, '0')} ${deadlineLocal.hour.toString().padLeft(2, '0')}:${deadlineLocal.minute.toString().padLeft(2, '0')}';
+
+    print('Reminder time (5 min before): ${reminderTime.toString()}');
+    print('Scheduled time (TZ): ${scheduledTime.toString()}');
+    print('Current TZ time: ${tz.TZDateTime.now(tz.local).toString()}');
+
+    if (scheduledTime.isBefore(tz.TZDateTime.now(tz.local))) {
+      print('Deadline reminder time has already passed for task $taskId');
+      print('Scheduled time: $scheduledTime');
+      print('Current TZ time: ${tz.TZDateTime.now(tz.local)}');
+      // If we are within the final 5-minute window, show immediately; otherwise skip to prevent early fire
+      final nowTz = tz.TZDateTime.now(tz.local);
+      final windowStart = tz.TZDateTime.from(
+        deadline,
+        tz.local,
+      ).subtract(const Duration(minutes: 5));
+      if (nowTz.isAfter(windowStart)) {
+        // Emit event to refresh dashboard
+        _emitEvent({
+          'type': 'deadline_reminder',
+          'task_id': taskId,
+          'task_name': taskName,
+          'deadline': deadlineStr,
+        });
+
+        await _localNotifications.show(
+          notifId,
+          '⚠️ Deadline Reminder',
+          'Task "$taskName" is due soon (Deadline: $deadlineStr)',
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              _deadlineReminderChannel,
+              'Deadline Reminders',
+              channelDescription: 'Notifications for deadline reminders',
+              icon: '@mipmap/ic_launcher',
+              color: Colors.orange,
+              priority: Priority.high,
+              importance: Importance.high,
+              playSound: true,
+              enableVibration: true,
+            ),
+            iOS: DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
+            ),
+          ),
+          payload: json.encode({
+            'type': 'deadline_reminder',
+            'task_id': taskId.toString(),
+            'task_name': taskName,
+          }),
+        );
+        await _trackNotificationId(taskId, notifId);
+        print('✅ Shown immediate deadline reminder (inside 5-min window)');
+      } else {
+        print('⏭️ Outside 5-min window; not showing immediate reminder');
+      }
+      return;
+    }
+
+    print('Attempting to schedule notification with ID: $notifId');
+    print('Notification channel: $_deadlineReminderChannel');
+
+    try {
+      await _localNotifications.zonedSchedule(
+        notifId,
+        '⚠️ Deadline Reminder',
+        'Task "$taskName" is due in 5 minutes (Deadline: $deadlineStr)',
+        scheduledTime,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _deadlineReminderChannel,
+            'Deadline Reminders',
+            channelDescription: 'Notifications for deadline reminders',
+            icon: '@mipmap/ic_launcher',
+            color: Colors.orange,
+            priority: Priority.high,
+            importance: Importance.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: json.encode({
+          'type': 'deadline_reminder',
+          'task_id': taskId.toString(),
+          'task_name': taskName,
+          'deadline': deadline.toIso8601String(),
+        }),
+      );
+      print('✅ Notification scheduled successfully!');
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('exact_alarms_not_permitted')) {
+        await _localNotifications.zonedSchedule(
+          notifId,
+          '⚠️ Deadline Reminder',
+          'Task "$taskName" is due in 5 minutes (Deadline: $deadlineStr)',
+          scheduledTime,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              _deadlineReminderChannel,
+              'Deadline Reminders',
+              channelDescription: 'Notifications for deadline reminders',
+              icon: '@mipmap/ic_launcher',
+              color: Colors.orange,
+              priority: Priority.high,
+              importance: Importance.high,
+              playSound: true,
+              enableVibration: true,
+            ),
+            iOS: DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: json.encode({
+            'type': 'deadline_reminder',
+            'task_id': taskId.toString(),
+            'task_name': taskName,
+            'deadline': deadline.toIso8601String(),
+          }),
+        );
+        print(
+          '⚠️ Exact alarms not permitted. Scheduled inexact 5-min deadline reminder for task $taskId.',
+        );
+      } else {
+        print('❌ Error scheduling notification: $e');
+        rethrow;
+      }
+    }
+
+    await _trackNotificationId(taskId, notifId);
+
+    print(
+      'Scheduled deadline reminder notification for task $taskId at ${scheduledTime.toString()}',
+    );
+  }
+
   /// Cancel all notifications for a specific task
   Future<void> cancelTaskNotifications(int taskId) async {
     // Cancel all IDs tracked for this task (reminders + deadline)
@@ -766,6 +1137,139 @@ class NotificationService {
     if (!list.contains(notifId.toString())) {
       list.add(notifId.toString());
       await prefs.setStringList(key, list);
+    }
+  }
+
+  /// Check currently scheduled notifications
+  Future<void> checkScheduledNotifications() async {
+    try {
+      final pendingNotifications = await _localNotifications
+          .pendingNotificationRequests();
+      print(
+        '📋 Currently scheduled notifications: ${pendingNotifications.length}',
+      );
+
+      for (final notification in pendingNotifications) {
+        print('  - ID: ${notification.id}, Title: ${notification.title}');
+      }
+    } catch (e) {
+      print('❌ Error checking scheduled notifications: $e');
+    }
+  }
+
+  /// Test function to manually test deadline reminder notification
+  Future<void> testDeadlineReminder() async {
+    print('🧪 Testing deadline reminder notification...');
+
+    // Schedule a test notification for 1 minute from now
+    final testTime = DateTime.now().add(const Duration(minutes: 1));
+    final scheduledTime = tz.TZDateTime.from(testTime, tz.local);
+
+    print('Test notification scheduled for: ${scheduledTime.toString()}');
+
+    try {
+      await _localNotifications.zonedSchedule(
+        999999, // Unique test ID
+        '🧪 Test Deadline Reminder',
+        'This is a test notification for deadline reminder!',
+        scheduledTime,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _deadlineReminderChannel,
+            'Deadline Reminders',
+            channelDescription: 'Notifications for deadline reminders',
+            icon: '@mipmap/ic_launcher',
+            color: Colors.orange,
+            priority: Priority.high,
+            importance: Importance.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: json.encode({
+          'type': 'test_deadline_reminder',
+          'task_id': '999999',
+          'task_name': 'Test Task',
+        }),
+      );
+      print('✅ Test notification scheduled successfully!');
+      print('Check your device in 1 minute for the test notification.');
+    } catch (e) {
+      // If exact alarms are not permitted, guide the user
+      final msg = e.toString();
+      if (msg.contains('exact_alarms_not_permitted')) {
+        print(
+          '❌ Exact alarms not permitted. Please enable "Allow exact alarms" in App settings.',
+        );
+      }
+      print('❌ Error scheduling test notification: $e');
+    }
+  }
+
+  /// Test function to manually test deadline reminder notification with custom time
+  Future<void> testDeadlineReminderWithTime(int minutesFromNow) async {
+    print(
+      '🧪 Testing deadline reminder notification for $minutesFromNow minutes from now...',
+    );
+
+    // Schedule a test notification for specified minutes from now
+    final testTime = DateTime.now().add(Duration(minutes: minutesFromNow));
+    final scheduledTime = tz.TZDateTime.from(testTime, tz.local);
+
+    print('Test notification scheduled for: ${scheduledTime.toString()}');
+
+    try {
+      await _localNotifications.zonedSchedule(
+        999998, // Unique test ID
+        '🧪 Test Deadline Reminder',
+        'This is a test notification for deadline reminder in $minutesFromNow minutes!',
+        scheduledTime,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _deadlineReminderChannel,
+            'Deadline Reminders',
+            channelDescription: 'Notifications for deadline reminders',
+            icon: '@mipmap/ic_launcher',
+            color: Colors.orange,
+            priority: Priority.high,
+            importance: Importance.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: json.encode({
+          'type': 'test_deadline_reminder',
+          'task_id': '999998',
+          'task_name': 'Test Task',
+        }),
+      );
+      print(
+        '✅ Test notification scheduled successfully for $minutesFromNow minutes from now!',
+      );
+      print(
+        'Check your device in $minutesFromNow minutes for the test notification.',
+      );
+    } catch (e) {
+      // If exact alarms are not permitted, guide the user
+      final msg = e.toString();
+      if (msg.contains('exact_alarms_not_permitted')) {
+        print(
+          '❌ Exact alarms not permitted. Please enable "Allow exact alarms" in App settings.',
+        );
+      }
+      print('❌ Error scheduling test notification: $e');
     }
   }
 
@@ -810,5 +1314,81 @@ class NotificationService {
   void dispose() {
     _messageSubscription?.cancel();
     _backgroundMessageSubscription?.cancel();
+  }
+
+  /// Public method to run debug tests
+  Future<void> runDebugTests() async {
+    print('🔍 Running notification service debug tests...');
+
+    // Check scheduled notifications
+    await checkScheduledNotifications();
+
+    // Test deadline reminder
+    await testDeadlineReminder();
+
+    print('🔍 Debug tests completed. Check logs above for results.');
+  }
+
+  /// Check if a specific task has deadline reminders scheduled
+  Future<bool> hasDeadlineReminderScheduled(int taskId) async {
+    try {
+      final pendingNotifications = await _localNotifications
+          .pendingNotificationRequests();
+
+      // Check if any notification with payload contains this task ID
+      for (final notification in pendingNotifications) {
+        if (notification.payload != null) {
+          try {
+            final payload = json.decode(notification.payload!);
+            if (payload['task_id'] == taskId.toString() &&
+                payload['type'] == 'deadline_reminder') {
+              return true;
+            }
+          } catch (e) {
+            // Skip invalid payloads
+            continue;
+          }
+        }
+      }
+      return false;
+    } catch (e) {
+      print('Error checking if deadline reminder is scheduled: $e');
+      return false;
+    }
+  }
+
+  /// Get all scheduled deadline reminders for a specific task
+  Future<List<Map<String, dynamic>>> getTaskDeadlineReminders(
+    int taskId,
+  ) async {
+    try {
+      final pendingNotifications = await _localNotifications
+          .pendingNotificationRequests();
+      final reminders = <Map<String, dynamic>>[];
+
+      for (final notification in pendingNotifications) {
+        if (notification.payload != null) {
+          try {
+            final payload = json.decode(notification.payload!);
+            if (payload['task_id'] == taskId.toString() &&
+                payload['type'] == 'deadline_reminder') {
+              reminders.add({
+                'id': notification.id,
+                'title': notification.title,
+                'body': notification.body,
+                'payload': payload,
+              });
+            }
+          } catch (e) {
+            // Skip invalid payloads
+            continue;
+          }
+        }
+      }
+      return reminders;
+    } catch (e) {
+      print('Error getting task deadline reminders: $e');
+      return [];
+    }
   }
 }
