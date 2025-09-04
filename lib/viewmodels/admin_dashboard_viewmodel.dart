@@ -277,14 +277,18 @@ class AdminDashboardViewModel extends ChangeNotifier {
                 taskName: name,
                 deadline: deadline,
               );
-              print('✅ AdminDashboardViewModel: Deadline reminder scheduled for task $taskId');
+              print(
+                '✅ AdminDashboardViewModel: Deadline reminder scheduled for task $taskId',
+              );
             }
           } catch (e) {
-            print('⚠️ AdminDashboardViewModel: Failed to schedule deadline reminder: $e');
+            print(
+              '⚠️ AdminDashboardViewModel: Failed to schedule deadline reminder: $e',
+            );
             // Don't fail the task creation if reminder scheduling fails
           }
         }
-        
+
         await refresh();
         return true;
       } else {
